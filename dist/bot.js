@@ -43,6 +43,7 @@ const fs = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
 const context_1 = require("./types/context");
 const messages_1 = require("./utils/messages");
+const github_1 = require("./utils/github");
 // Check if bot token exists
 if (!config_1.config.telegramToken) {
     throw new Error("TELEGRAM_BOT_TOKEN is not defined in .env file");
@@ -65,23 +66,6 @@ bot.command("start", async (ctx) => {
         console.error("Error in start command:", error);
     }
 });
-// Función para validar URL de GitHub
-async function isValidGithubRepo(url) {
-    try {
-        const apiUrl = url
-            .replace(/\.git$/, '') // Remover .git si existe
-            .replace('github.com', 'api.github.com/repos');
-        console.log("Checking repository at:", apiUrl);
-        const response = await fetch(apiUrl);
-        const isValid = response.status === 200;
-        console.log("Repository validation result:", isValid);
-        return isValid;
-    }
-    catch (error) {
-        console.error("Error validating repository:", error);
-        return false;
-    }
-}
 // Función para extraer URLs de GitHub del texto
 function extractGithubUrl(text) {
     // Remover @ si existe al principio
@@ -102,13 +86,13 @@ function extractGithubUrl(text) {
 // Message handlers
 bot.on("message:text", async (ctx) => {
     try {
-        // Guardar ID del mensaje del usuario
         ctx.session.userMessageIds = [...(ctx.session.userMessageIds || []), ctx.message.message_id];
         let text = ctx.message.text.trim();
         const githubUrl = extractGithubUrl(text);
         if (githubUrl) {
             console.log("Detected GitHub URL:", githubUrl);
-            if (await isValidGithubRepo(githubUrl)) {
+            const validation = await (0, github_1.validateGithubRepo)(githubUrl);
+            if (validation.isValid) {
                 const keyboard = new grammy_1.InlineKeyboard()
                     .text("Generate PDF", `generate_pdf:${githubUrl}`)
                     .text("Cancel", `cancel:${githubUrl}`);
@@ -116,11 +100,10 @@ bot.on("message:text", async (ctx) => {
                     reply_to_message_id: ctx.message.message_id,
                     reply_markup: keyboard
                 });
-                // Guardar ID del mensaje del bot
                 ctx.session.botMessageIds = [...(ctx.session.botMessageIds || []), response.message_id];
             }
             else {
-                const response = await ctx.reply("This GitHub repository doesn't seem to be accessible. Please check the URL and try again.");
+                const response = await ctx.reply(validation.error || "Repository validation failed");
                 ctx.session.botMessageIds = [...(ctx.session.botMessageIds || []), response.message_id];
             }
         }
