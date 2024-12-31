@@ -94,6 +94,7 @@ bot.on("message:text", async (ctx) => {
 
 // Manejar callbacks de los botones
 bot.callbackQuery(/^generate_pdf:/, async (ctx) => {
+    let pdfPath: string | null = null;
     try {
         const githubUrl = ctx.callbackQuery.data.replace('generate_pdf:', '');
         console.log("Processing URL in callback:", githubUrl);
@@ -105,7 +106,7 @@ bot.callbackQuery(/^generate_pdf:/, async (ctx) => {
             throw new Error("Invalid GitHub URL");
         }
         
-        const pdfPath = await githubToPdf(githubUrl);
+        pdfPath = await githubToPdf(githubUrl);
         console.log("PDF generated successfully at:", pdfPath);
         
         if (!fs.existsSync(pdfPath)) {
@@ -119,6 +120,16 @@ bot.callbackQuery(/^generate_pdf:/, async (ctx) => {
     } catch (error: any) {
         console.error("Error generating PDF:", error);
         await ctx.reply(`Error: ${error.message || "Unknown error occurred"}. Please try again.`);
+    } finally {
+        // Limpiar el archivo PDF si existe
+        if (pdfPath && fs.existsSync(pdfPath)) {
+            try {
+                fs.unlinkSync(pdfPath);
+                console.log("Temporary PDF file deleted:", pdfPath);
+            } catch (error) {
+                console.error("Error deleting PDF file:", error);
+            }
+        }
     }
 });
 
