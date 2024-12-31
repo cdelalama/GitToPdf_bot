@@ -13,5 +13,7 @@ export const config = {
         .map(user => user.trim())
         .filter(user => user.length > 0),
     githubToken: process.env.GITHUB_TOKEN,
-    adminId: Number(process.env.ADMIN_ID) || null
+    adminId: Number(process.env.ADMIN_ID) || null,
+    supabaseUrl: process.env.SUPABASE_URL || '',
+    supabaseKey: process.env.SUPABASE_KEY || ''
 };

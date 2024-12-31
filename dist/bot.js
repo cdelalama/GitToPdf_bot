@@ -45,6 +45,7 @@ const context_1 = require("./types/context");
 const messages_1 = require("./utils/messages");
 const github_1 = require("./utils/github");
 const auth_1 = require("./utils/auth");
+const database_1 = require("./utils/database");
 // Check if bot token exists
 if (!config_1.config.telegramToken) {
     throw new Error("TELEGRAM_BOT_TOKEN is not defined in .env file");
@@ -123,6 +124,7 @@ bot.callbackQuery(/^generate_pdf:/, async (ctx) => {
             throw new Error("Invalid GitHub URL");
         }
         pdfPath = await (0, githubToPdf_1.githubToPdf)(githubUrl);
+        await database_1.Database.incrementPdfCount(ctx.from.id);
         console.log("PDF generated successfully at:", pdfPath);
         if (!fs.existsSync(pdfPath)) {
             throw new Error("Generated PDF file not found");

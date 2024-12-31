@@ -8,6 +8,7 @@ import { MyContext, initialSession } from "./types/context";
 import { deleteMessages, deleteMessageAfterTimeout } from "./utils/messages";
 import { validateGithubRepo, extractGithubUrl } from "./utils/github";
 import { isUserAuthorized, handleUnauthorized } from "./utils/auth";
+import { Database } from "./utils/database";
 
 // Check if bot token exists
 if (!config.telegramToken) {
@@ -101,6 +102,7 @@ bot.callbackQuery(/^generate_pdf:/, async (ctx) => {
         }
         
         pdfPath = await githubToPdf(githubUrl);
+        await Database.incrementPdfCount(ctx.from.id);
         console.log("PDF generated successfully at:", pdfPath);
         
         if (!fs.existsSync(pdfPath)) {

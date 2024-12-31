@@ -21,6 +21,7 @@
   "homepage": "https://github.com/cdelalama/GitToPdf_bot#readme",
   "dependencies": {
     "-": "^0.0.1",
+    "@supabase/supabase-js": "^2.47.10",
     "@types/node": "^22.10.2",
     "dotenv": "^16.4.7",
     "grammy": "^1.33.0",
