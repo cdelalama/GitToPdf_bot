@@ -4,20 +4,38 @@ exports.isUserAuthorized = isUserAuthorized;
 exports.handleUnauthorized = handleUnauthorized;
 const config_1 = require("../config/config");
 const messages_1 = require("./messages");
+const database_1 = require("./database");
 async function isUserAuthorized(ctx) {
     const userId = ctx.from?.id;
     const username = ctx.from?.username?.toLowerCase();
-    if (!userId || !username) {
-        console.log("No user ID or username found in context");
+    if (!userId) {
+        console.log("No user ID found in context");
         return false;
     }
-    // Verificar si el usuario está en la lista de permitidos
-    const isAllowed = config_1.config.allowedUsers.some(allowed => allowed.toLowerCase() === username ||
-        allowed === userId.toString());
-    if (!isAllowed) {
-        console.log(`Unauthorized access attempt by: ${username} (${userId})`);
+    // Verificar si el usuario existe en la base de datos
+    let user = await database_1.Database.getUser(userId);
+    // Si el usuario no existe, crearlo como pendiente
+    if (!user) {
+        user = await database_1.Database.createUser({
+            telegram_id: userId,
+            telegram_username: username || undefined,
+            first_name: ctx.from?.first_name || 'Unknown',
+            last_name: ctx.from?.last_name,
+            language_code: ctx.from?.language_code
+        });
     }
-    return isAllowed;
+    // Actualizar última interacción
+    await database_1.Database.updateLastInteraction(userId);
+    // Verificar estado del usuario
+    if (user?.status === 'active') {
+        return true;
+    }
+    // Si es admin, activar automáticamente
+    if (userId === config_1.config.adminId) {
+        await database_1.Database.updateUserStatus(userId, 'active');
+        return true;
+    }
+    return false;
 }
 async function handleUnauthorized(ctx) {
     try {

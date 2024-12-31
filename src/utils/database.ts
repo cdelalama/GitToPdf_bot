@@ -4,6 +4,17 @@ import { DatabaseUser, UserStatus } from '../types/database';
 
 const supabase = createClient(config.supabaseUrl, config.supabaseKey);
 
+interface RepoHistory {
+    id: number;
+    telegram_user_id: number;
+    repo_url: string;
+    processed_at: Date;
+    status: 'success' | 'failed';
+    error_message?: string;
+    pdf_size?: number;
+    processing_time?: number;
+}
+
 export class Database {
     static async getUser(telegramId: number): Promise<DatabaseUser | null> {
         const { data, error } = await supabase
@@ -80,10 +91,16 @@ export class Database {
     }
 
     static async incrementPdfCount(telegramId: number): Promise<boolean> {
+        const { data: user } = await supabase
+            .from('users_git2pdf_bot')
+            .select('pdfs_generated')
+            .eq('telegram_id', telegramId)
+            .single();
+
         const { error } = await supabase
             .from('users_git2pdf_bot')
             .update({ 
-                pdfs_generated: supabase.rpc('increment', { value: 1 }),
+                pdfs_generated: (user?.pdfs_generated || 0) + 1,
                 last_pdf_generated_at: new Date()
             })
             .eq('telegram_id', telegramId);
@@ -101,5 +118,37 @@ export class Database {
             .from('users_git2pdf_bot')
             .update({ last_interaction_at: new Date() })
             .eq('telegram_id', telegramId);
+    }
+
+    static async logRepoProcess(data: {
+        telegram_user_id: number;
+        repo_url: string;
+        status: 'success' | 'failed';
+        error_message?: string;
+        pdf_size?: number;
+        processing_time?: number;
+    }): Promise<void> {
+        try {
+            await supabase
+                .from('repo_history')
+                .insert([data]);
+        } catch (error) {
+            console.error('Error logging repo process:', error);
+        }
+    }
+
+    static async getUserHistory(telegramId: number): Promise<RepoHistory[]> {
+        const { data, error } = await supabase
+            .from('repo_history')
+            .select('*')
+            .eq('telegram_user_id', telegramId)
+            .order('processed_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching user history:', error);
+            return [];
+        }
+
+        return data || [];
     }
 } 

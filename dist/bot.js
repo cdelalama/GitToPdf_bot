@@ -109,8 +109,9 @@ bot.on("message:text", async (ctx) => {
 // Manejar callbacks de los botones
 bot.callbackQuery(/^generate_pdf:/, async (ctx) => {
     let pdfPath = null;
+    const startTime = Date.now();
+    const githubUrl = ctx.callbackQuery.data.replace('generate_pdf:', '');
     try {
-        const githubUrl = ctx.callbackQuery.data.replace('generate_pdf:', '');
         console.log("Processing URL in callback:", githubUrl);
         // Borrar mensajes anteriores
         await (0, messages_1.deleteMessages)(ctx, [...(ctx.session.botMessageIds || []), ...(ctx.session.userMessageIds || [])]);
@@ -124,7 +125,18 @@ bot.callbackQuery(/^generate_pdf:/, async (ctx) => {
             throw new Error("Invalid GitHub URL");
         }
         pdfPath = await (0, githubToPdf_1.githubToPdf)(githubUrl);
-        await database_1.Database.incrementPdfCount(ctx.from.id);
+        const pdfSize = fs.statSync(pdfPath).size;
+        // Registrar en ambas tablas
+        await Promise.all([
+            database_1.Database.logRepoProcess({
+                telegram_user_id: ctx.from.id,
+                repo_url: githubUrl,
+                status: 'success',
+                pdf_size: pdfSize,
+                processing_time: Date.now() - startTime
+            }),
+            database_1.Database.incrementPdfCount(ctx.from.id)
+        ]);
         console.log("PDF generated successfully at:", pdfPath);
         if (!fs.existsSync(pdfPath)) {
             throw new Error("Generated PDF file not found");
@@ -134,6 +146,12 @@ bot.callbackQuery(/^generate_pdf:/, async (ctx) => {
         fileStream.close();
     }
     catch (error) {
+        await database_1.Database.logRepoProcess({
+            telegram_user_id: ctx.from.id,
+            repo_url: githubUrl,
+            status: 'failed',
+            error_message: error.message
+        });
         console.error("Error generating PDF:", error);
         const errorMsg = await ctx.reply(`Error: ${error.message || "Unknown error occurred"}. Please try again.`);
         ctx.session.botMessageIds = [...(ctx.session.botMessageIds || []), errorMsg.message_id];

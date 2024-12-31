@@ -58,10 +58,15 @@ class Database {
         return true;
     }
     static async incrementPdfCount(telegramId) {
+        const { data: user } = await supabase
+            .from('users_git2pdf_bot')
+            .select('pdfs_generated')
+            .eq('telegram_id', telegramId)
+            .single();
         const { error } = await supabase
             .from('users_git2pdf_bot')
             .update({
-            pdfs_generated: supabase.rpc('increment', { value: 1 }),
+            pdfs_generated: (user?.pdfs_generated || 0) + 1,
             last_pdf_generated_at: new Date()
         })
             .eq('telegram_id', telegramId);
@@ -76,6 +81,28 @@ class Database {
             .from('users_git2pdf_bot')
             .update({ last_interaction_at: new Date() })
             .eq('telegram_id', telegramId);
+    }
+    static async logRepoProcess(data) {
+        try {
+            await supabase
+                .from('repo_history')
+                .insert([data]);
+        }
+        catch (error) {
+            console.error('Error logging repo process:', error);
+        }
+    }
+    static async getUserHistory(telegramId) {
+        const { data, error } = await supabase
+            .from('repo_history')
+            .select('*')
+            .eq('telegram_user_id', telegramId)
+            .order('processed_at', { ascending: false });
+        if (error) {
+            console.error('Error fetching user history:', error);
+            return [];
+        }
+        return data || [];
     }
 }
 exports.Database = Database;
