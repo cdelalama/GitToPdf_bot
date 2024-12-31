@@ -41,12 +41,18 @@ const githubToPdf_1 = require("./modules/githubToPdf");
 const config_1 = require("./config/config");
 const fs = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
+const context_1 = require("./types/context");
+const messages_1 = require("./utils/messages");
 // Check if bot token exists
 if (!config_1.config.telegramToken) {
     throw new Error("TELEGRAM_BOT_TOKEN is not defined in .env file");
 }
 // Initialize bot with token
 const bot = new grammy_1.Bot(config_1.config.telegramToken);
+// Configurar el middleware de sesión
+bot.use((0, grammy_1.session)({
+    initial: () => context_1.initialSession
+}));
 // Command handlers
 bot.command("start", async (ctx) => {
     try {
@@ -96,6 +102,8 @@ function extractGithubUrl(text) {
 // Message handlers
 bot.on("message:text", async (ctx) => {
     try {
+        // Guardar ID del mensaje del usuario
+        ctx.session.userMessageIds = [...(ctx.session.userMessageIds || []), ctx.message.message_id];
         let text = ctx.message.text.trim();
         const githubUrl = extractGithubUrl(text);
         if (githubUrl) {
@@ -104,13 +112,16 @@ bot.on("message:text", async (ctx) => {
                 const keyboard = new grammy_1.InlineKeyboard()
                     .text("Generate PDF", `generate_pdf:${githubUrl}`)
                     .text("Cancel", `cancel:${githubUrl}`);
-                await ctx.reply("I detected a GitHub repository. Would you like to generate a PDF?", {
+                const response = await ctx.reply("I detected a GitHub repository. Would you like to generate a PDF?", {
                     reply_to_message_id: ctx.message.message_id,
                     reply_markup: keyboard
                 });
+                // Guardar ID del mensaje del bot
+                ctx.session.botMessageIds = [...(ctx.session.botMessageIds || []), response.message_id];
             }
             else {
-                await ctx.reply("This GitHub repository doesn't seem to be accessible. Please check the URL and try again.");
+                const response = await ctx.reply("This GitHub repository doesn't seem to be accessible. Please check the URL and try again.");
+                ctx.session.botMessageIds = [...(ctx.session.botMessageIds || []), response.message_id];
             }
         }
     }
@@ -124,8 +135,14 @@ bot.callbackQuery(/^generate_pdf:/, async (ctx) => {
     try {
         const githubUrl = ctx.callbackQuery.data.replace('generate_pdf:', '');
         console.log("Processing URL in callback:", githubUrl);
-        await ctx.answerCallbackQuery();
-        await ctx.reply("Cloning repository and generating PDF. Please wait...");
+        // Borrar mensajes anteriores
+        await (0, messages_1.deleteMessages)(ctx, [...(ctx.session.botMessageIds || []), ...(ctx.session.userMessageIds || [])]);
+        const response = await ctx.reply("Cloning repository and generating PDF. Please wait...");
+        ctx.session.botMessageIds = [response.message_id];
+        // Programar el borrado del mensaje después de 3 segundos
+        if (ctx.chat?.id) {
+            (0, messages_1.deleteMessageAfterTimeout)(ctx, ctx.chat.id, response.message_id, 3000);
+        }
         if (!githubUrl.startsWith('https://github.com')) {
             throw new Error("Invalid GitHub URL");
         }
@@ -140,7 +157,8 @@ bot.callbackQuery(/^generate_pdf:/, async (ctx) => {
     }
     catch (error) {
         console.error("Error generating PDF:", error);
-        await ctx.reply(`Error: ${error.message || "Unknown error occurred"}. Please try again.`);
+        const errorMsg = await ctx.reply(`Error: ${error.message || "Unknown error occurred"}. Please try again.`);
+        ctx.session.botMessageIds = [...(ctx.session.botMessageIds || []), errorMsg.message_id];
     }
     finally {
         // Limpiar el archivo PDF si existe
@@ -156,8 +174,14 @@ bot.callbackQuery(/^generate_pdf:/, async (ctx) => {
     }
 });
 bot.callbackQuery(/^cancel:/, async (ctx) => {
-    await ctx.answerCallbackQuery("Operation cancelled");
-    await ctx.reply("Operation cancelled.");
+    try {
+        await (0, messages_1.deleteMessages)(ctx, [...(ctx.session.botMessageIds || []), ...(ctx.session.userMessageIds || [])]);
+        await ctx.answerCallbackQuery("Operation cancelled");
+    }
+    catch (error) {
+        console.error("Error cancelling operation:", error);
+        await ctx.answerCallbackQuery();
+    }
 });
 // Error handler
 bot.catch((err) => {
