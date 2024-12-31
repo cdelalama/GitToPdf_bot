@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.validateGithubRepo = validateGithubRepo;
+exports.extractGithubUrl = extractGithubUrl;
 async function validateGithubRepo(url) {
     try {
         // Extraer owner y repo de la URL
@@ -42,4 +43,21 @@ async function validateGithubRepo(url) {
             error: "Failed to validate repository. Please check the URL and try again."
         };
     }
+}
+// Función para extraer URLs de GitHub del texto
+function extractGithubUrl(text) {
+    // Remover @ si existe al principio
+    text = text.replace(/^@/, '');
+    // Regex mejorada para URLs de GitHub
+    const githubRegex = /https?:\/\/github\.com\/[\w.-]+\/[\w.-]+/;
+    const matches = text.match(githubRegex);
+    if (matches) {
+        let url = matches[0];
+        // Asegurarnos de que la URL es correcta
+        url = url.replace(/\.git$/, ''); // Primero removemos .git si existe
+        url = url + '.git'; // Luego lo añadimos de forma consistente
+        console.log("Extracted GitHub URL:", url);
+        return url;
+    }
+    return null;
 }

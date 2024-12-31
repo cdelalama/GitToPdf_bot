@@ -53,4 +53,24 @@ export async function validateGithubRepo(url: string): Promise<{ isValid: boolea
             error: "Failed to validate repository. Please check the URL and try again." 
         };
     }
+}
+
+// Función para extraer URLs de GitHub del texto
+export function extractGithubUrl(text: string): string | null {
+    // Remover @ si existe al principio
+    text = text.replace(/^@/, '');
+    
+    // Regex mejorada para URLs de GitHub
+    const githubRegex = /https?:\/\/github\.com\/[\w.-]+\/[\w.-]+/;
+    const matches = text.match(githubRegex);
+    
+    if (matches) {
+        let url = matches[0];
+        // Asegurarnos de que la URL es correcta
+        url = url.replace(/\.git$/, ''); // Primero removemos .git si existe
+        url = url + '.git'; // Luego lo añadimos de forma consistente
+        console.log("Extracted GitHub URL:", url);
+        return url;
+    }
+    return null;
 } 

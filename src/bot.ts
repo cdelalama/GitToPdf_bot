@@ -6,7 +6,7 @@ import * as fs from "fs";
 import path from "path";
 import { MyContext, initialSession } from "./types/context";
 import { deleteMessages, deleteMessageAfterTimeout } from "./utils/messages";
-import { validateGithubRepo } from "./utils/github";
+import { validateGithubRepo, extractGithubUrl } from "./utils/github";
 
 // Check if bot token exists
 if (!config.telegramToken) {
@@ -34,26 +34,6 @@ bot.command("start", async (ctx) => {
         console.error("Error in start command:", error);
     }
 });
-
-// Función para extraer URLs de GitHub del texto
-function extractGithubUrl(text: string): string | null {
-    // Remover @ si existe al principio
-    text = text.replace(/^@/, '');
-    
-    // Regex mejorada para URLs de GitHub
-    const githubRegex = /https?:\/\/github\.com\/[\w.-]+\/[\w.-]+/;
-    const matches = text.match(githubRegex);
-    
-    if (matches) {
-        let url = matches[0];
-        // Asegurarnos de que la URL es correcta
-        url = url.replace(/\.git$/, ''); // Primero removemos .git si existe
-        url = url + '.git'; // Luego lo añadimos de forma consistente
-        console.log("Extracted GitHub URL:", url);
-        return url;
-    }
-    return null;
-}
 
 // Message handlers
 bot.on("message:text", async (ctx) => {
