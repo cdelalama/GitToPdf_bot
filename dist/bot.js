@@ -44,6 +44,7 @@ const path_1 = __importDefault(require("path"));
 const context_1 = require("./types/context");
 const messages_1 = require("./utils/messages");
 const github_1 = require("./utils/github");
+const auth_1 = require("./utils/auth");
 // Check if bot token exists
 if (!config_1.config.telegramToken) {
     throw new Error("TELEGRAM_BOT_TOKEN is not defined in .env file");
@@ -54,6 +55,15 @@ const bot = new grammy_1.Bot(config_1.config.telegramToken);
 bot.use((0, grammy_1.session)({
     initial: () => context_1.initialSession
 }));
+// Middleware de autorización para todos los comandos y mensajes
+bot.use(async (ctx, next) => {
+    if (await (0, auth_1.isUserAuthorized)(ctx)) {
+        await next();
+    }
+    else {
+        await (0, auth_1.handleUnauthorized)(ctx);
+    }
+});
 // Command handlers
 bot.command("start", async (ctx) => {
     try {

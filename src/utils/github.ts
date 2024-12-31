@@ -1,3 +1,5 @@
+import { config } from "../config/config";
+
 interface GitHubRepo {
     name: string;
     private: boolean;
@@ -7,7 +9,6 @@ interface GitHubRepo {
 
 export async function validateGithubRepo(url: string): Promise<{ isValid: boolean; error?: string }> {
     try {
-        // Extraer owner y repo de la URL
         const match = url.match(/github\.com\/([^\/]+)\/([^\/\.]+)/);
         if (!match) {
             return { isValid: false, error: "Invalid GitHub URL format" };
@@ -18,22 +19,17 @@ export async function validateGithubRepo(url: string): Promise<{ isValid: boolea
         
         console.log("Checking repository at:", apiUrl);
         
-        const response = await fetch(apiUrl, {
-            headers: {
-                'Accept': 'application/vnd.github.v3+json',
-                // Si tienes un token de GitHub, añádelo aquí para evitar límites de rate
-                ...(process.env.GITHUB_TOKEN ? {
-                    'Authorization': `token ${process.env.GITHUB_TOKEN}`
-                } : {})
-            }
-        });
+        const response = await fetch(apiUrl);
+
+        // Para repos públicos, incluso sin autenticación podemos continuar
+        if (response.status === 401 || response.status === 403) {
+            console.log("Warning: Unauthenticated request to GitHub API");
+            return { isValid: true }; // Asumimos que es válido y dejamos que el clone lo verifique
+        }
 
         if (!response.ok) {
             if (response.status === 404) {
                 return { isValid: false, error: "Repository not found" };
-            }
-            if (response.status === 403) {
-                return { isValid: false, error: "API rate limit exceeded" };
             }
             return { isValid: false, error: `GitHub API error: ${response.statusText}` };
         }
@@ -48,10 +44,7 @@ export async function validateGithubRepo(url: string): Promise<{ isValid: boolea
         
     } catch (error) {
         console.error("Error validating repository:", error);
-        return { 
-            isValid: false, 
-            error: "Failed to validate repository. Please check the URL and try again." 
-        };
+        return { isValid: true }; // En caso de error de API, permitimos el intento de clonación
     }
 }
 

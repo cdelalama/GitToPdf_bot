@@ -7,6 +7,7 @@ import path from "path";
 import { MyContext, initialSession } from "./types/context";
 import { deleteMessages, deleteMessageAfterTimeout } from "./utils/messages";
 import { validateGithubRepo, extractGithubUrl } from "./utils/github";
+import { isUserAuthorized, handleUnauthorized } from "./utils/auth";
 
 // Check if bot token exists
 if (!config.telegramToken) {
@@ -20,6 +21,15 @@ const bot = new Bot<MyContext>(config.telegramToken);
 bot.use(session({
     initial: () => initialSession
 }));
+
+// Middleware de autorización para todos los comandos y mensajes
+bot.use(async (ctx, next) => {
+    if (await isUserAuthorized(ctx)) {
+        await next();
+    } else {
+        await handleUnauthorized(ctx);
+    }
+});
 
 // Command handlers
 bot.command("start", async (ctx) => {
