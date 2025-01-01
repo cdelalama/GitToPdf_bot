@@ -5,6 +5,7 @@ exports.deleteMessageAfterTimeout = deleteMessageAfterTimeout;
 exports.notifyAdmin = notifyAdmin;
 const grammy_1 = require("grammy");
 const config_1 = require("../config/config");
+const grammy_2 = require("grammy");
 async function deleteMessages(ctx, messageIds) {
     if (ctx.chat && messageIds) {
         for (let i = messageIds.length - 1; i >= 0; i--) {
@@ -53,31 +54,28 @@ async function deleteMessageAfterTimeout(ctx, chatId, messageId, timeout) {
 async function notifyAdmin(ctx, action) {
     try {
         const adminId = config_1.config.adminId;
-        if (!adminId) {
-            console.error("Admin ID not configured");
+        if (!adminId || !ctx.from)
             return;
-        }
         const user = ctx.from;
         const message = ctx.message?.text || 'No message content';
-        // Escapar caracteres especiales de Markdown
-        const escapedMessage = message.replace(/[_*`[\]()~>#+=|{}.!-]/g, '\\$&');
-        const escapedName = `${user?.first_name || ''}${user?.last_name ? ' ' + user?.last_name : ''}`.replace(/[_*`[\]()~>#+=|{}.!-]/g, '\\$&');
+        const keyboard = new grammy_2.InlineKeyboard()
+            .text("✅ Approve", `approve_user:${user.id}`)
+            .text("❌ Reject", `reject_user:${user.id}`);
         const notification = [
-            `🚨 *Unauthorized Access Attempt*`,
+            `🚨 *New Access Request*`,
+            ``,
+            `*User Info:*`,
+            `• ID: \`${user.id}\``,
+            `• Username: @${user.username || 'no\\_username'}`,
+            `• Name: ${user.first_name} ${user.last_name || ''}`,
+            `• Language: ${user.language_code || 'unknown'}`,
             ``,
             `*Action:* ${action}`,
-            `*User Info:*`,
-            `• ID: \`${user?.id}\``,
-            `• Username: @${user?.username || 'no\\_username'}`,
-            `• Name: ${escapedName}`,
-            `• Language: ${user?.language_code || 'unknown'}`,
-            ``,
-            `*Message:* \`${escapedMessage}\``,
-            ``,
-            `_To allow this user, add their ID to ALLOWED\\_USERS in \\.env_`
+            `*Message:* \`${message}\``,
         ].join('\n');
         await ctx.api.sendMessage(adminId, notification, {
-            parse_mode: "MarkdownV2"
+            parse_mode: "MarkdownV2",
+            reply_markup: keyboard
         });
     }
     catch (error) {
