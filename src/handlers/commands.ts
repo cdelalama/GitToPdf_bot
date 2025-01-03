@@ -6,8 +6,13 @@ export async function handleStart(ctx: MyContext) {
     try {
         console.log("Received start command from:", ctx.from?.username);
         
-        const keyboard = new InlineKeyboard()
-            .webApp("🌐 Open Web App", config.webAppUrl);
+        const isAdmin = ctx.from?.id === config.adminId;
+        let keyboard;
+        
+        if (isAdmin) {
+            keyboard = new InlineKeyboard()
+                .webApp("⚙️ Admin Dashboard", config.webAppUrl);
+        }
         
         await ctx.reply(
             "Welcome to GitToPDFBot! 📚\n\n" +
@@ -18,8 +23,8 @@ export async function handleStart(ctx: MyContext) {
             "• Feed code context to LLMs (ChatGPT, Claude, etc.)\n\n" +
             "Just send me a GitHub repository URL and I'll generate a PDF with its contents.\n\n" +
             "🔜 Coming soon: Direct integration with ChatGPT to analyze repositories!\n\n" +
-            "Example: https://github.com/username/repository\n\n" +
-            "You can also use our Web Interface for a better experience!",
+            "Example: https://github.com/username/repository" +
+            (isAdmin ? "\n\n🔐 Admin: Use the dashboard to manage users and monitor bot usage." : ""),
             { reply_markup: keyboard }
         );
     } catch (error) {
