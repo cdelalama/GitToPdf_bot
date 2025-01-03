@@ -31,6 +31,9 @@
     "simple-git": "^3.27.0"
   },
   "devDependencies": {
-    "@types/pdfkit": "^0.13.8"
+    "@types/pdfkit": "^0.13.8",
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0",
+    "@types/node": "^20.0.0"
   }
 }

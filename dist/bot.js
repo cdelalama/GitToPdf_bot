@@ -7,6 +7,7 @@ const auth_1 = require("./utils/auth");
 const commands_1 = require("./handlers/commands");
 const messages_1 = require("./handlers/messages");
 const callbacks_1 = require("./handlers/callbacks");
+const webAppAuth_1 = require("./middleware/webAppAuth");
 if (!config_1.config.telegramToken) {
     throw new Error("TELEGRAM_BOT_TOKEN is not defined in .env file");
 }
@@ -24,6 +25,7 @@ bot.use(async (ctx, next) => {
 });
 // Command handlers
 bot.command("start", commands_1.handleStart);
+bot.command("webapp", commands_1.handleWebApp);
 // Message handlers
 bot.on("message:text", messages_1.handleTextMessage);
 // Callback handlers
@@ -31,6 +33,8 @@ bot.callbackQuery(/^generate_pdf:/, callbacks_1.handleGeneratePdf);
 bot.callbackQuery(/^cancel:/, callbacks_1.handleCancel);
 bot.callbackQuery(/^approve_user:/, callbacks_1.handleApproveUser);
 bot.callbackQuery(/^reject_user:/, callbacks_1.handleRejectUser);
+// Middleware para validar solicitudes de la TWA
+bot.use(webAppAuth_1.webAppAuth);
 // Error handler
 bot.catch((err) => {
     console.error("Bot error occurred:", err);
