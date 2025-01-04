@@ -6,6 +6,7 @@ import { githubToPdf } from "../modules/githubToPdf";
 import { Database } from "../utils/database";
 import { deleteMessages, deleteMessageAfterTimeout } from "../utils/messages";
 import { DynamicConfig } from "../utils/dynamicConfig";
+import { handleError } from "../utils/errors";
 
 // Control de procesos concurrentes
 let currentProcesses = 0;
@@ -69,13 +70,14 @@ export async function handleGeneratePdf(ctx: MyContext) {
         fileStream.close();
         
     } catch (error) {
-        console.error("Error generating PDF:", error);
-        const errorMessage = await DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
-        const errorMsg = await ctx.reply(error instanceof Error ? error.message : errorMessage);
-        
-        if (errorMsg.message_id) {
-            ctx.session.botMessageIds = [...(ctx.session.botMessageIds || []), errorMsg.message_id];
-        }
+        await handleError(error, ctx, 'PDF Generation');
+        await Database.logRepoProcess({
+            telegram_user_id: userId,
+            repo_url: githubUrl,
+            status: 'failed',
+            error_message: error instanceof Error ? error.message : 'Unknown error',
+            processing_time: Date.now() - startTime
+        });
     } finally {
         currentProcesses--;
         if (pdfPath && fs.existsSync(pdfPath)) {
@@ -83,7 +85,7 @@ export async function handleGeneratePdf(ctx: MyContext) {
                 fs.unlinkSync(pdfPath);
                 console.log("Temporary PDF file deleted:", pdfPath);
             } catch (error) {
-                console.error("Error deleting PDF file:", error);
+                await handleError(error, ctx, 'Cleanup - Delete PDF');
             }
         }
     }
@@ -94,9 +96,7 @@ export async function handleCancel(ctx: MyContext) {
         await deleteMessages(ctx, [...(ctx.session.botMessageIds || []), ...(ctx.session.userMessageIds || [])]);
         await ctx.answerCallbackQuery("Operation cancelled");
     } catch (error) {
-        console.error("Error cancelling operation:", error);
-        const errorMessage = await DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
-        await ctx.answerCallbackQuery(errorMessage);
+        await handleError(error, ctx, 'Cancel Operation');
     }
 }
 
@@ -116,9 +116,7 @@ export async function handleApproveUser(ctx: MyContext) {
         const approvalMessage = await DynamicConfig.get('APPROVAL_MESSAGE', '✅ Your access request has been approved! You can now use the bot.');
         await ctx.api.sendMessage(userId, approvalMessage);
     } catch (error) {
-        console.error("Error approving user:", error);
-        const errorMessage = await DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
-        await ctx.answerCallbackQuery(errorMessage);
+        await handleError(error, ctx, 'Approve User');
     }
 }
 
@@ -138,8 +136,6 @@ export async function handleRejectUser(ctx: MyContext) {
         const rejectionMessage = await DynamicConfig.get('REJECTION_MESSAGE', '❌ Your access request has been denied. Contact the administrator for more information.');
         await ctx.api.sendMessage(userId, rejectionMessage);
     } catch (error) {
-        console.error("Error rejecting user:", error);
-        const errorMessage = await DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
-        await ctx.answerCallbackQuery(errorMessage);
+        await handleError(error, ctx, 'Reject User');
     }
 } 

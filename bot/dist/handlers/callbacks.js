@@ -47,6 +47,7 @@ const githubToPdf_1 = require("../modules/githubToPdf");
 const database_1 = require("../utils/database");
 const messages_1 = require("../utils/messages");
 const dynamicConfig_1 = require("../utils/dynamicConfig");
+const errors_1 = require("../utils/errors");
 // Control de procesos concurrentes
 let currentProcesses = 0;
 async function handleGeneratePdf(ctx) {
@@ -99,12 +100,14 @@ async function handleGeneratePdf(ctx) {
         fileStream.close();
     }
     catch (error) {
-        console.error("Error generating PDF:", error);
-        const errorMessage = await dynamicConfig_1.DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
-        const errorMsg = await ctx.reply(error instanceof Error ? error.message : errorMessage);
-        if (errorMsg.message_id) {
-            ctx.session.botMessageIds = [...(ctx.session.botMessageIds || []), errorMsg.message_id];
-        }
+        await (0, errors_1.handleError)(error, ctx, 'PDF Generation');
+        await database_1.Database.logRepoProcess({
+            telegram_user_id: userId,
+            repo_url: githubUrl,
+            status: 'failed',
+            error_message: error instanceof Error ? error.message : 'Unknown error',
+            processing_time: Date.now() - startTime
+        });
     }
     finally {
         currentProcesses--;
@@ -114,7 +117,7 @@ async function handleGeneratePdf(ctx) {
                 console.log("Temporary PDF file deleted:", pdfPath);
             }
             catch (error) {
-                console.error("Error deleting PDF file:", error);
+                await (0, errors_1.handleError)(error, ctx, 'Cleanup - Delete PDF');
             }
         }
     }
@@ -125,9 +128,7 @@ async function handleCancel(ctx) {
         await ctx.answerCallbackQuery("Operation cancelled");
     }
     catch (error) {
-        console.error("Error cancelling operation:", error);
-        const errorMessage = await dynamicConfig_1.DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
-        await ctx.answerCallbackQuery(errorMessage);
+        await (0, errors_1.handleError)(error, ctx, 'Cancel Operation');
     }
 }
 async function handleApproveUser(ctx) {
@@ -144,9 +145,7 @@ async function handleApproveUser(ctx) {
         await ctx.api.sendMessage(userId, approvalMessage);
     }
     catch (error) {
-        console.error("Error approving user:", error);
-        const errorMessage = await dynamicConfig_1.DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
-        await ctx.answerCallbackQuery(errorMessage);
+        await (0, errors_1.handleError)(error, ctx, 'Approve User');
     }
 }
 async function handleRejectUser(ctx) {
@@ -163,8 +162,6 @@ async function handleRejectUser(ctx) {
         await ctx.api.sendMessage(userId, rejectionMessage);
     }
     catch (error) {
-        console.error("Error rejecting user:", error);
-        const errorMessage = await dynamicConfig_1.DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
-        await ctx.answerCallbackQuery(errorMessage);
+        await (0, errors_1.handleError)(error, ctx, 'Reject User');
     }
 }

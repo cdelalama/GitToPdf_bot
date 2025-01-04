@@ -9,12 +9,15 @@ const commands_1 = require("./handlers/commands");
 const messages_1 = require("./handlers/messages");
 const callbacks_1 = require("./handlers/callbacks");
 const webAppSecurity_1 = require("./middleware/webAppSecurity");
+const errors_1 = require("./utils/errors");
 async function startBot() {
     try {
         if (!config_1.config.telegramToken) {
             throw new Error("TELEGRAM_BOT_TOKEN is not defined in .env file");
         }
         const bot = new grammy_1.Bot(config_1.config.telegramToken);
+        // Inicializar error handler con la instancia del bot
+        (0, errors_1.initErrorHandler)(bot);
         // Cargar configuraciones dinámicas
         const welcomeMessage = await dynamicConfig_1.DynamicConfig.get('WELCOME_MESSAGE', 'Welcome to Git2PDF Bot!');
         const errorMessage = await dynamicConfig_1.DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
@@ -45,16 +48,7 @@ async function startBot() {
         bot.callbackQuery(/^reject_user:/, callbacks_1.handleRejectUser);
         // Error handler
         bot.catch(async (err) => {
-            console.error("Bot error occurred:", err);
-            const notifyAdmins = await dynamicConfig_1.DynamicConfig.get('NOTIFY_ADMINS_ON_ERROR', true);
-            if (notifyAdmins) {
-                // Implementar notificación a admins
-            }
-            if (err.ctx) {
-                await err.ctx.reply(errorMessage, {
-                    reply_to_message_id: err.ctx.msg?.message_id
-                });
-            }
+            await (0, errors_1.handleError)(err, err.ctx, 'Global Error Handler');
         });
         // Start the bot
         console.log("Starting bot...");
@@ -66,6 +60,8 @@ async function startBot() {
         });
     }
     catch (error) {
+        // Notificar error de inicio a los admins
+        await (0, errors_1.handleError)(error, undefined, 'Bot Startup');
         console.error('Failed to start bot:', error);
         process.exit(1);
     }

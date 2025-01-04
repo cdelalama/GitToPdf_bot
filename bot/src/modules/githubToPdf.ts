@@ -36,6 +36,7 @@ export async function githubToPdf(repoUrl: string): Promise<string> {
         const excludedTypes = await DynamicConfig.get('EXCLUDED_FILE_TYPES', ['jpg', 'png', 'gif', 'mp4', 'zip', 'exe']);
         const maxFileSizeKb = await DynamicConfig.get('MAX_FILE_SIZE_KB', 1000);
         const maxPdfSizeMb = await DynamicConfig.get('MAX_PDF_SIZE_MB', 10);
+        const fontSize = await DynamicConfig.get('PDF_DEFAULT_FONT_SIZE', 12);
 
         // Crear un PDF
         console.log(`Generating PDF: ${pdfPath}`);
@@ -90,7 +91,7 @@ export async function githubToPdf(repoUrl: string): Promise<string> {
 
                         doc.addPage()
                            .font("Courier")
-                           .fontSize(12)
+                           .fontSize(fontSize)
                            .text(`File: ${fileRelativePath}\n\n${content}`);
                     } catch (error: any) {
                         if (error.message.includes('maximum allowed size')) {
@@ -99,7 +100,7 @@ export async function githubToPdf(repoUrl: string): Promise<string> {
                         console.warn(`Could not read file ${fileRelativePath}: ${error.message}`);
                         doc.addPage()
                            .font("Courier")
-                           .fontSize(12)
+                           .fontSize(fontSize)
                            .text(`File: ${fileRelativePath}\n\nCould not read file contents (possibly binary or encoded file)`);
                     }
                 }
@@ -113,7 +114,7 @@ export async function githubToPdf(repoUrl: string): Promise<string> {
         if (skippedFiles.bySize.length > 0 || skippedFiles.byType.length > 0) {
             doc.addPage()
                .font("Courier")
-               .fontSize(12)
+               .fontSize(fontSize)
                .text("Skipped Files Summary:\n\n");
 
             if (skippedFiles.bySize.length > 0) {

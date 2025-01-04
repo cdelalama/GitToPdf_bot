@@ -35,6 +35,7 @@ async function githubToPdf(repoUrl) {
         const excludedTypes = await dynamicConfig_1.DynamicConfig.get('EXCLUDED_FILE_TYPES', ['jpg', 'png', 'gif', 'mp4', 'zip', 'exe']);
         const maxFileSizeKb = await dynamicConfig_1.DynamicConfig.get('MAX_FILE_SIZE_KB', 1000);
         const maxPdfSizeMb = await dynamicConfig_1.DynamicConfig.get('MAX_PDF_SIZE_MB', 10);
+        const fontSize = await dynamicConfig_1.DynamicConfig.get('PDF_DEFAULT_FONT_SIZE', 12);
         // Crear un PDF
         console.log(`Generating PDF: ${pdfPath}`);
         const doc = new pdfkit_1.default();
@@ -80,7 +81,7 @@ async function githubToPdf(repoUrl) {
                         }
                         doc.addPage()
                             .font("Courier")
-                            .fontSize(12)
+                            .fontSize(fontSize)
                             .text(`File: ${fileRelativePath}\n\n${content}`);
                     }
                     catch (error) {
@@ -90,7 +91,7 @@ async function githubToPdf(repoUrl) {
                         console.warn(`Could not read file ${fileRelativePath}: ${error.message}`);
                         doc.addPage()
                             .font("Courier")
-                            .fontSize(12)
+                            .fontSize(fontSize)
                             .text(`File: ${fileRelativePath}\n\nCould not read file contents (possibly binary or encoded file)`);
                     }
                 }
@@ -102,7 +103,7 @@ async function githubToPdf(repoUrl) {
         if (skippedFiles.bySize.length > 0 || skippedFiles.byType.length > 0) {
             doc.addPage()
                 .font("Courier")
-                .fontSize(12)
+                .fontSize(fontSize)
                 .text("Skipped Files Summary:\n\n");
             if (skippedFiles.bySize.length > 0) {
                 doc.text(`Files skipped due to size (>${maxFileSizeKb}KB):\n${skippedFiles.bySize.join('\n')}\n\n`);

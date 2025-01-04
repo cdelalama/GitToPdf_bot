@@ -7,6 +7,7 @@ import { handleStart, handleWebApp } from "./handlers/commands";
 import { handleTextMessage } from "./handlers/messages";
 import { handleGeneratePdf, handleCancel, handleApproveUser, handleRejectUser } from "./handlers/callbacks";
 import { webAppSecurityMiddleware } from "./middleware/webAppSecurity";
+import { handleError, initErrorHandler } from "./utils/errors";
 
 async function startBot() {
     try {
@@ -15,6 +16,9 @@ async function startBot() {
         }
 
         const bot = new Bot<MyContext>(config.telegramToken);
+
+        // Inicializar error handler con la instancia del bot
+        initErrorHandler(bot);
 
         // Cargar configuraciones dinámicas
         const welcomeMessage = await DynamicConfig.get('WELCOME_MESSAGE', 'Welcome to Git2PDF Bot!');
@@ -52,18 +56,7 @@ async function startBot() {
 
         // Error handler
         bot.catch(async (err) => {
-            console.error("Bot error occurred:", err);
-            
-            const notifyAdmins = await DynamicConfig.get('NOTIFY_ADMINS_ON_ERROR', true);
-            if (notifyAdmins) {
-                // Implementar notificación a admins
-            }
-
-            if (err.ctx) {
-                await err.ctx.reply(errorMessage, {
-                    reply_to_message_id: err.ctx.msg?.message_id
-                });
-            }
+            await handleError(err, err.ctx, 'Global Error Handler');
         });
 
         // Start the bot
@@ -76,6 +69,8 @@ async function startBot() {
         });
 
     } catch (error) {
+        // Notificar error de inicio a los admins
+        await handleError(error, undefined, 'Bot Startup');
         console.error('Failed to start bot:', error);
         process.exit(1);
     }
