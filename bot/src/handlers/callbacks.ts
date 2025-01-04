@@ -7,6 +7,9 @@ import { Database } from "../utils/database";
 import { deleteMessages, deleteMessageAfterTimeout } from "../utils/messages";
 import { DynamicConfig } from "../utils/dynamicConfig";
 
+// Control de procesos concurrentes
+let currentProcesses = 0;
+
 export async function handleGeneratePdf(ctx: MyContext) {
     if (!ctx.callbackQuery?.data || !ctx.from) return;
     
@@ -16,6 +19,13 @@ export async function handleGeneratePdf(ctx: MyContext) {
     const userId = ctx.from.id;
     
     try {
+        // Verificar límite de procesos concurrentes
+        const maxProcesses = await DynamicConfig.get('MAX_CONCURRENT_PROCESSES', 3);
+        if (currentProcesses >= maxProcesses) {
+            throw new Error('Too many concurrent processes. Please try again later.');
+        }
+        currentProcesses++;
+
         await deleteMessages(ctx, [...(ctx.session.botMessageIds || []), ...(ctx.session.userMessageIds || [])]);
         
         const response = await ctx.reply("Cloning repository and generating PDF. Please wait...");
@@ -54,12 +64,13 @@ export async function handleGeneratePdf(ctx: MyContext) {
     } catch (error) {
         console.error("Error generating PDF:", error);
         const errorMessage = await DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
-        const errorMsg = await ctx.reply(errorMessage);
+        const errorMsg = await ctx.reply(error instanceof Error ? error.message : errorMessage);
         
         if (errorMsg.message_id) {
             ctx.session.botMessageIds = [...(ctx.session.botMessageIds || []), errorMsg.message_id];
         }
     } finally {
+        currentProcesses--;
         if (pdfPath && fs.existsSync(pdfPath)) {
             try {
                 fs.unlinkSync(pdfPath);

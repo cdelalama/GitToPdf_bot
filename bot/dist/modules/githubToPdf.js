@@ -22,9 +22,15 @@ async function githubToPdf(repoUrl) {
     const repoPath = path_1.default.join(TEMP_DIR, repoName);
     const pdfPath = path_1.default.join(TEMP_DIR, `${repoName}.pdf`);
     try {
-        // Clonar el repositorio
-        console.log(`Cloning repository: ${repoUrl}`);
-        await execAsync(`git clone ${repoUrl} ${repoPath}`);
+        // Obtener timeout para clonación
+        const cloneTimeout = await dynamicConfig_1.DynamicConfig.get('GITHUB_CLONE_TIMEOUT_MS', 300000);
+        // Clonar el repositorio con timeout
+        console.log(`Cloning repository: ${repoUrl} (timeout: ${cloneTimeout}ms)`);
+        const clonePromise = execAsync(`git clone ${repoUrl} ${repoPath}`);
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Repository cloning timed out')), cloneTimeout);
+        });
+        await Promise.race([clonePromise, timeoutPromise]);
         // Obtener tipos de archivo excluidos
         const excludedTypes = await dynamicConfig_1.DynamicConfig.get('EXCLUDED_FILE_TYPES', ['jpg', 'png', 'gif', 'mp4', 'zip', 'exe']);
         const maxFileSizeKb = await dynamicConfig_1.DynamicConfig.get('MAX_FILE_SIZE_KB', 1000);

@@ -47,6 +47,8 @@ const githubToPdf_1 = require("../modules/githubToPdf");
 const database_1 = require("../utils/database");
 const messages_1 = require("../utils/messages");
 const dynamicConfig_1 = require("../utils/dynamicConfig");
+// Control de procesos concurrentes
+let currentProcesses = 0;
 async function handleGeneratePdf(ctx) {
     if (!ctx.callbackQuery?.data || !ctx.from)
         return;
@@ -55,6 +57,12 @@ async function handleGeneratePdf(ctx) {
     const githubUrl = ctx.callbackQuery.data.replace('generate_pdf:', '');
     const userId = ctx.from.id;
     try {
+        // Verificar límite de procesos concurrentes
+        const maxProcesses = await dynamicConfig_1.DynamicConfig.get('MAX_CONCURRENT_PROCESSES', 3);
+        if (currentProcesses >= maxProcesses) {
+            throw new Error('Too many concurrent processes. Please try again later.');
+        }
+        currentProcesses++;
         await (0, messages_1.deleteMessages)(ctx, [...(ctx.session.botMessageIds || []), ...(ctx.session.userMessageIds || [])]);
         const response = await ctx.reply("Cloning repository and generating PDF. Please wait...");
         ctx.session.botMessageIds = [response.message_id];
@@ -87,12 +95,13 @@ async function handleGeneratePdf(ctx) {
     catch (error) {
         console.error("Error generating PDF:", error);
         const errorMessage = await dynamicConfig_1.DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
-        const errorMsg = await ctx.reply(errorMessage);
+        const errorMsg = await ctx.reply(error instanceof Error ? error.message : errorMessage);
         if (errorMsg.message_id) {
             ctx.session.botMessageIds = [...(ctx.session.botMessageIds || []), errorMsg.message_id];
         }
     }
     finally {
+        currentProcesses--;
         if (pdfPath && fs.existsSync(pdfPath)) {
             try {
                 fs.unlinkSync(pdfPath);
