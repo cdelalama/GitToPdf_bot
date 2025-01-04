@@ -13,7 +13,6 @@ export interface DatabaseUser {
     language_code: string | null;
     created_at: Date;
     updated_at: Date;
-    is_admin: boolean;
 }
 
 export type UserStatus = 'active' | 'banned' | 'pending'; 

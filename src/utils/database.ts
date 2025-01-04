@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { config } from '../config/config';
 import { DatabaseUser, UserStatus } from '../types/database';
 
-export const supabase = createClient(config.supabaseUrl, config.supabaseKey);
+const supabase = createClient(config.supabaseUrl, config.supabaseKey);
 
 interface RepoHistory {
     id: number;
@@ -47,8 +47,7 @@ export class Database {
                 last_name: user.last_name,
                 language_code: user.language_code,
                 status: 'pending',
-                pdfs_generated: 0,
-                is_admin: false
+                pdfs_generated: 0
             }])
             .select()
             .single();
