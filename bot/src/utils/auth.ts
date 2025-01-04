@@ -30,14 +30,8 @@ export async function isUserAuthorized(ctx: MyContext): Promise<boolean> {
     // Actualizar última interacción
     await Database.updateLastInteraction(userId);
 
-    // Verificar estado del usuario
-    if (user?.status === 'active') {
-        return true;
-    }
-
-    // Si es admin, activar automáticamente
-    if (userId === config.adminId) {
-        await Database.updateUserStatus(userId, 'active');
+    // Si es admin o está activo, permitir acceso
+    if (user?.is_admin || user?.status === 'active') {
         return true;
     }
 

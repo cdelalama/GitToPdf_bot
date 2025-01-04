@@ -1,43 +1,34 @@
-import { createClient } from '@supabase/supabase-js';
-import { config } from '../config/config';
-import { DatabaseUser, UserStatus } from '../types/database';
-
-const supabase = createClient(config.supabaseUrl, config.supabaseKey);
-
-interface RepoHistory {
-    id: number;
-    telegram_user_id: number;
-    repo_url: string;
-    processed_at: Date;
-    status: 'success' | 'failed';
-    error_message?: string;
-    pdf_size?: number;
-    processing_time?: number;
-}
-
-export class Database {
-    static async getUser(telegramId: number): Promise<DatabaseUser | null> {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Database = void 0;
+const supabase_js_1 = require("@supabase/supabase-js");
+const config_1 = require("../config/config");
+const supabase = (0, supabase_js_1.createClient)(config_1.config.supabaseUrl, config_1.config.supabaseKey);
+class Database {
+    static async getAdmins() {
+        const { data, error } = await supabase
+            .from('users_git2pdf_bot')
+            .select('*')
+            .eq('is_admin', true);
+        if (error) {
+            console.error('Error fetching admins:', error);
+            return [];
+        }
+        return data || [];
+    }
+    static async getUser(telegramId) {
         const { data, error } = await supabase
             .from('users_git2pdf_bot')
             .select('*')
             .eq('telegram_id', telegramId)
             .single();
-
         if (error) {
             console.error('Error fetching user:', error);
             return null;
         }
-
         return data;
     }
-
-    static async createUser(user: {
-        telegram_id: number;
-        telegram_username?: string;
-        first_name: string;
-        last_name?: string;
-        language_code?: string;
-    }): Promise<DatabaseUser | null> {
+    static async createUser(user) {
         const { data, error } = await supabase
             .from('users_git2pdf_bot')
             .insert([{
@@ -51,104 +42,79 @@ export class Database {
             }])
             .select()
             .single();
-
         if (error) {
             console.error('Error creating user:', error);
             return null;
         }
-
         return data;
     }
-
-    static async updateUserStatus(
-        telegramId: number, 
-        status: UserStatus, 
-        bannedBy?: number, 
-        banReason?: string
-    ): Promise<boolean> {
-        const updateData: Partial<DatabaseUser> = {
+    static async updateUserStatus(telegramId, status, bannedBy, banReason) {
+        const updateData = {
             status,
             updated_at: new Date()
         };
-
         if (status === 'banned') {
             updateData.banned_at = new Date();
             updateData.banned_by = bannedBy;
             updateData.ban_reason = banReason;
         }
-
         const { error } = await supabase
             .from('users_git2pdf_bot')
             .update(updateData)
             .eq('telegram_id', telegramId);
-
         if (error) {
             console.error('Error updating user status:', error);
             return false;
         }
-
         return true;
     }
-
-    static async incrementPdfCount(telegramId: number): Promise<boolean> {
+    static async incrementPdfCount(telegramId) {
         const { data: user } = await supabase
             .from('users_git2pdf_bot')
             .select('pdfs_generated')
             .eq('telegram_id', telegramId)
             .single();
-
         const { error } = await supabase
             .from('users_git2pdf_bot')
-            .update({ 
-                pdfs_generated: (user?.pdfs_generated || 0) + 1,
-                last_pdf_generated_at: new Date()
-            })
+            .update({
+            pdfs_generated: (user?.pdfs_generated || 0) + 1,
+            last_pdf_generated_at: new Date()
+        })
             .eq('telegram_id', telegramId);
-
         if (error) {
             console.error('Error incrementing PDF count:', error);
             return false;
         }
-
         return true;
     }
-
-    static async updateLastInteraction(telegramId: number): Promise<void> {
+    static async updateLastInteraction(telegramId) {
         await supabase
             .from('users_git2pdf_bot')
             .update({ last_interaction_at: new Date() })
             .eq('telegram_id', telegramId);
     }
-
-    static async logRepoProcess(data: {
-        telegram_user_id: number;
-        repo_url: string;
-        status: 'success' | 'failed';
-        error_message?: string;
-        pdf_size?: number;
-        processing_time?: number;
-    }): Promise<void> {
+    static async logRepoProcess(data) {
         try {
             await supabase
                 .from('repo_history')
                 .insert([data]);
-        } catch (error) {
+        }
+        catch (error) {
             console.error('Error logging repo process:', error);
         }
     }
-
-    static async getUserHistory(telegramId: number): Promise<RepoHistory[]> {
+    static async getUserHistory(telegramId) {
         const { data, error } = await supabase
             .from('repo_history')
             .select('*')
             .eq('telegram_user_id', telegramId)
             .order('processed_at', { ascending: false });
-
         if (error) {
             console.error('Error fetching user history:', error);
             return [];
         }
-
         return data || [];
     }
-} 
+}
+exports.Database = Database;
+Database.supabase = supabase;

@@ -1,18 +1,17 @@
 import { MyContext } from "../types/context";
 import { InlineKeyboard } from "grammy";
 import { config } from "../config/config";
+import { Database } from "../utils/database";
 
 export async function handleStart(ctx: MyContext) {
     try {
         console.log("Received start command from:", ctx.from?.username);
         
-        const isAdmin = ctx.from?.id === config.adminId;
-        let keyboard;
+        const user = await Database.getUser(ctx.from?.id || 0);
+        const isAdmin = user?.is_admin || false;
+        console.log("Is admin?", isAdmin, "User:", user);
         
-        if (isAdmin) {
-            keyboard = new InlineKeyboard()
-                .webApp("⚙️ Admin Dashboard", config.webAppUrl);
-        }
+        const keyboard = isAdmin ? new InlineKeyboard().webApp("⚙️ Admin Dashboard", config.webAppUrl) : undefined;
         
         await ctx.reply(
             "Welcome to GitToPDFBot! 📚\n\n" +
@@ -34,11 +33,19 @@ export async function handleStart(ctx: MyContext) {
 
 export async function handleWebApp(ctx: MyContext) {
     try {
-        await ctx.reply("Open our Web Interface:", {
+        const user = await Database.getUser(ctx.from?.id || 0);
+        const isAdmin = user?.is_admin || false;
+        
+        if (!isAdmin) {
+            await ctx.reply("⚠️ This command is only available for administrators.");
+            return;
+        }
+
+        await ctx.reply("Open Admin Dashboard:", {
             reply_markup: {
                 inline_keyboard: [[
                     {
-                        text: "🌐 Open Web App",
+                        text: "⚙️ Admin Dashboard",
                         web_app: { url: config.webAppUrl }
                     }
                 ]]

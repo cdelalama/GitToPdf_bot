@@ -13,7 +13,6 @@ export const config = {
         .map(user => user.trim())
         .filter(user => user.length > 0),
     githubToken: process.env.GITHUB_TOKEN,
-    adminId: Number(process.env.ADMIN_ID) || null,
     supabaseUrl: process.env.SUPABASE_URL || '',
     supabaseKey: process.env.SUPABASE_KEY || '',
     webAppUrl: process.env.WEBAPP_URL || 'https://8894-80-102-3-93.ngrok-free.app',
