@@ -6,7 +6,14 @@ import path from "path";
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 8080
+    port: 8080,
+    headers: {
+      'Content-Security-Policy': "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://telegram.org;"
+    },
+    hmr: {
+      clientPort: 443,
+      protocol: 'wss'
+    }
   },
   resolve: {
     alias: {
