@@ -32,11 +32,15 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.dynamicConfig = exports.config = void 0;
 const dotenv = __importStar(require("dotenv"));
 const dynamicConfig_1 = require("../utils/dynamicConfig");
 const database_1 = require("../utils/database");
+const path_1 = __importDefault(require("path"));
 // Cargar las variables de entorno
 dotenv.config();
 // Configuración estática (variables de entorno)
@@ -51,7 +55,17 @@ exports.config = {
 // Configuración dinámica (desde la base de datos)
 exports.dynamicConfig = {
     async getTempDir() {
-        return await dynamicConfig_1.DynamicConfig.get('TEMP_DIR', './temp');
+        const defaultTempDir = path_1.default.join(process.cwd(), 'temp');
+        return await dynamicConfig_1.DynamicConfig.get('TEMP_DIR', defaultTempDir);
+    },
+    async getMaxFiles() {
+        return await dynamicConfig_1.DynamicConfig.get('MAX_FILES', 1000);
+    },
+    async getMinDiskSpaceMb() {
+        return await dynamicConfig_1.DynamicConfig.get('MIN_DISK_SPACE_MB', 100);
+    },
+    async getPdfRetentionHours() {
+        return await dynamicConfig_1.DynamicConfig.get('PDF_RETENTION_HOURS', 24);
     },
     async getGithubCloneTimeout() {
         return await dynamicConfig_1.DynamicConfig.get('GITHUB_CLONE_TIMEOUT_MS', 300000);
@@ -105,5 +119,17 @@ exports.dynamicConfig = {
     },
     async getSuccessMessage() {
         return await dynamicConfig_1.DynamicConfig.get('SUCCESS_MESSAGE', 'Your PDF has been generated successfully!');
+    },
+    async getProcessingMessage() {
+        return await dynamicConfig_1.DynamicConfig.get('PROCESSING_MESSAGE', '✨ Starting PDF generation. You will receive the file when ready...');
+    },
+    async getPendingMessage() {
+        return await dynamicConfig_1.DynamicConfig.get('PENDING_MESSAGE', '⏳ Your access request is being reviewed. You will be notified when processed.');
+    },
+    async getApprovalMessage() {
+        return await dynamicConfig_1.DynamicConfig.get('APPROVAL_MESSAGE', '✅ Your access request has been approved. You can now use the bot!');
+    },
+    async getRejectionMessage() {
+        return await dynamicConfig_1.DynamicConfig.get('REJECTION_MESSAGE', '❌ Your access request has been denied. Contact the administrator for more information.');
     }
 };

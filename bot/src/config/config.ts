@@ -1,6 +1,7 @@
 import * as dotenv from "dotenv";
 import { DynamicConfig } from "../utils/dynamicConfig";
 import { Database } from "../utils/database";
+import path from "path";
 
 // Cargar las variables de entorno
 dotenv.config();
@@ -18,7 +19,20 @@ export const config = {
 // Configuración dinámica (desde la base de datos)
 export const dynamicConfig = {
     async getTempDir(): Promise<string> {
-        return await DynamicConfig.get('TEMP_DIR', './temp');
+        const defaultTempDir = path.join(process.cwd(), 'temp');
+        return await DynamicConfig.get('TEMP_DIR', defaultTempDir);
+    },
+
+    async getMaxFiles(): Promise<number> {
+        return await DynamicConfig.get('MAX_FILES', 1000);
+    },
+
+    async getMinDiskSpaceMb(): Promise<number> {
+        return await DynamicConfig.get('MIN_DISK_SPACE_MB', 100);
+    },
+
+    async getPdfRetentionHours(): Promise<number> {
+        return await DynamicConfig.get('PDF_RETENTION_HOURS', 24);
     },
 
     async getGithubCloneTimeout(): Promise<number> {
@@ -89,5 +103,21 @@ export const dynamicConfig = {
 
     async getSuccessMessage(): Promise<string> {
         return await DynamicConfig.get('SUCCESS_MESSAGE', 'Your PDF has been generated successfully!');
+    },
+
+    async getProcessingMessage(): Promise<string> {
+        return await DynamicConfig.get('PROCESSING_MESSAGE', '✨ Starting PDF generation. You will receive the file when ready...');
+    },
+
+    async getPendingMessage(): Promise<string> {
+        return await DynamicConfig.get('PENDING_MESSAGE', '⏳ Your access request is being reviewed. You will be notified when processed.');
+    },
+
+    async getApprovalMessage(): Promise<string> {
+        return await DynamicConfig.get('APPROVAL_MESSAGE', '✅ Your access request has been approved. You can now use the bot!');
+    },
+
+    async getRejectionMessage(): Promise<string> {
+        return await DynamicConfig.get('REJECTION_MESSAGE', '❌ Your access request has been denied. Contact the administrator for more information.');
     }
 };

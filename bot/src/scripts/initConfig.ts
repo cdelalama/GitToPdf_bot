@@ -1,6 +1,32 @@
 import { DynamicConfig } from '../utils/dynamicConfig';
+import fs from 'fs';
+import path from 'path';
 
 const defaultConfigs = [
+    {
+        key: 'TEMP_DIR',
+        value: path.join(process.cwd(), 'temp'),
+        type: 'string',
+        description: 'Directory for temporary files'
+    },
+    {
+        key: 'MAX_FILES',
+        value: '1000',
+        type: 'number',
+        description: 'Maximum number of files to process in a repository'
+    },
+    {
+        key: 'MIN_DISK_SPACE_MB',
+        value: '100',
+        type: 'number',
+        description: 'Minimum required disk space in MB for operations'
+    },
+    {
+        key: 'PDF_RETENTION_HOURS',
+        value: '24',
+        type: 'number',
+        description: 'Number of hours to keep generated PDFs before cleanup'
+    },
     {
         key: 'MAX_PDF_SIZE_MB',
         value: '10',
@@ -89,6 +115,55 @@ const defaultConfigs = [
 
 async function initializeConfigs() {
     try {
+        // Inicializar directorio temporal
+        const defaultTempDir = path.join(process.cwd(), 'temp');
+        const TEMP_DIR = await DynamicConfig.get('TEMP_DIR', defaultTempDir);
+
+        // Crear estructura de directorios con manejo de errores mejorado
+        const dirs = [
+            TEMP_DIR,
+            path.join(TEMP_DIR, 'pdfs'),
+            path.join(TEMP_DIR, 'operations')
+        ];
+
+        for (const dir of dirs) {
+            try {
+                // Crear directorio con permisos específicos
+                await fs.promises.mkdir(dir, { 
+                    recursive: true, 
+                    mode: 0o755  // rwxr-xr-x
+                });
+
+                // Verificar permisos con un archivo temporal único
+                const testFile = path.join(dir, `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.tmp`);
+                await fs.promises.writeFile(testFile, 'test');
+                
+                // Verificar que podemos leer el archivo
+                const content = await fs.promises.readFile(testFile, 'utf8');
+                if (content !== 'test') {
+                    throw new Error(`File content verification failed in ${dir}`);
+                }
+                
+                // Limpiar archivo de prueba
+                await fs.promises.unlink(testFile);
+                
+                // Verificar permisos del directorio
+                const stats = await fs.promises.stat(dir);
+                if (process.platform !== 'win32') {
+                    const currentUid = process.getuid?.() ?? -1;
+                    if (currentUid !== -1 && stats.uid !== currentUid) {
+                        throw new Error(`Directory ${dir} is not owned by current user`);
+                    }
+                }
+
+                console.log(`✅ Directory initialized with proper permissions: ${dir}`);
+            } catch (dirError) {
+                console.error(`❌ Error initializing directory ${dir}:`, dirError);
+                throw dirError;  // Re-lanzar para que se maneje arriba
+            }
+        }
+
+        // Inicializar configuraciones
         for (const config of defaultConfigs) {
             await DynamicConfig.set(
                 config.key,
@@ -99,6 +174,7 @@ async function initializeConfigs() {
         console.log('Configuration initialization completed successfully!');
     } catch (error) {
         console.error('Error initializing configurations:', error);
+        process.exit(1);
     }
 }
 

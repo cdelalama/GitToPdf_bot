@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from './components/ui/toaster';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Index from './pages/Index';
+import Logs from './pages/Logs';
 
 const queryClient = new QueryClient();
 
@@ -14,7 +15,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/variables" element={<ConfigurationPanel />} />
-            <Route path="/logs" element={<div>Logs page coming soon...</div>} />
+            <Route path="/logs" element={<Logs />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>

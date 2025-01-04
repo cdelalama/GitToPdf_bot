@@ -5,136 +5,273 @@ import path from "path";
 import { githubToPdf } from "../modules/githubToPdf";
 import { Database } from "../utils/database";
 import { deleteMessages, deleteMessageAfterTimeout } from "../utils/messages";
-import { DynamicConfig } from "../utils/dynamicConfig";
+import { dynamicConfig } from "../config/config";
 import { handleError } from "../utils/errors";
 
 // Control de procesos concurrentes
 let currentProcesses = 0;
 
-export async function handleGeneratePdf(ctx: MyContext) {
-    if (!ctx.callbackQuery?.data || !ctx.from) return;
-    
+export async function handleGeneratePdf(ctx: MyContext): Promise<void> {
     let pdfPath: string | null = null;
+    let fileStream: fs.ReadStream | null = null;
+    let githubUrl: string | null = null;
     const startTime = Date.now();
-    const githubUrl = ctx.callbackQuery.data.replace('generate_pdf:', '');
-    const userId = ctx.from.id;
-    
+
     try {
+        if (!ctx.callbackQuery?.data) {
+            throw new Error('Invalid callback data');
+        }
+
         // Verificar límite de procesos concurrentes
-        const maxProcesses = await DynamicConfig.get('MAX_CONCURRENT_PROCESSES', 3);
+        const maxProcesses = await dynamicConfig.getMaxConcurrentProcesses();
         if (currentProcesses >= maxProcesses) {
             throw new Error('Too many concurrent processes. Please try again later.');
         }
+
+        // Extraer URL de GitHub
+        githubUrl = ctx.callbackQuery.data.split(':')[1];
+        if (!githubUrl) {
+            throw new Error('No GitHub URL provided');
+        }
+
+        // Validar URL
+        if (!githubUrl.startsWith('https://github.com')) {
+            throw new Error('⚠️ Please send a valid GitHub repository URL.');
+        }
+
+        // Incrementar contador de procesos
         currentProcesses++;
 
-        await deleteMessages(ctx, [...(ctx.session.botMessageIds || []), ...(ctx.session.userMessageIds || [])]);
+        // Obtener mensaje de procesamiento
+        const processingMessage = await dynamicConfig.getProcessingMessage();
         
-        const response = await ctx.reply("Cloning repository and generating PDF. Please wait...");
-        ctx.session.botMessageIds = [response.message_id];
-        
-        if (ctx.chat?.id) {
-            deleteMessageAfterTimeout(ctx, ctx.chat.id, response.message_id, 3000);
-        }
+        // Notificar inicio del proceso
+        await ctx.answerCallbackQuery(processingMessage);
 
-        if (!githubUrl.startsWith('https://github.com')) {
-            const invalidUrlMessage = await DynamicConfig.get('INVALID_URL_MESSAGE', '⚠️ Please send a valid GitHub repository URL.');
-            throw new Error(invalidUrlMessage);
-        }
-        
+        // Generar PDF
         pdfPath = await githubToPdf(githubUrl);
-        const pdfSize = fs.statSync(pdfPath).size;
-        const pdfSizeMb = pdfSize / (1024 * 1024);
-        
-        // Verificar tamaño máximo del PDF
-        const maxPdfSizeMb = await DynamicConfig.get('MAX_PDF_SIZE_MB', 10);
+
+        // Verificar tamaño del PDF
+        const stats = fs.statSync(pdfPath);
+        const pdfSizeMb = stats.size / (1024 * 1024);
+        const maxPdfSizeMb = await dynamicConfig.getMaxPdfSizeMb();
         if (pdfSizeMb > maxPdfSizeMb) {
             throw new Error(`PDF size (${pdfSizeMb.toFixed(2)}MB) exceeds maximum allowed size (${maxPdfSizeMb}MB)`);
         }
-        
-        await Promise.all([
-            Database.logRepoProcess({
-                telegram_user_id: userId,
-                repo_url: githubUrl,
-                status: 'success',
-                pdf_size: pdfSize,
-                processing_time: Date.now() - startTime
-            }),
-            Database.incrementPdfCount(userId)
-        ]);
 
-        const successMessage = await DynamicConfig.get('SUCCESS_MESSAGE', 'Your PDF has been generated successfully!');
-        const fileStream = fs.createReadStream(pdfPath);
-        await ctx.replyWithDocument(new InputFile(fileStream, path.basename(pdfPath)), {
-            caption: successMessage
+        // Preparar información del PDF
+        const pdfInfo = `\n\nRepository: ${path.basename(githubUrl)}\nSize: ${pdfSizeMb.toFixed(2)}MB\nGeneration time: ${((Date.now() - startTime) / 1000).toFixed(1)}s`;
+
+        // Enviar documento
+        fileStream = fs.createReadStream(pdfPath);
+        const document = await ctx.replyWithDocument(new InputFile(fileStream, path.basename(pdfPath)), {
+            caption: await dynamicConfig.getSuccessMessage() + pdfInfo
         });
-        fileStream.close();
-        
+
+        // Solo si el documento se envió correctamente, registrar éxito
+        if (document) {
+            await Database.supabase
+                .from('pdf_generations')
+                .insert([{
+                    telegram_id: ctx.from?.id,
+                    repository_url: githubUrl,
+                    pdf_size: pdfSizeMb,
+                    generation_time: Date.now() - startTime,
+                    status: 'success'
+                }]);
+        }
+
     } catch (error) {
-        await handleError(error, ctx, 'PDF Generation');
-        await Database.logRepoProcess({
-            telegram_user_id: userId,
-            repo_url: githubUrl,
-            status: 'failed',
-            error_message: error instanceof Error ? error.message : 'Unknown error',
-            processing_time: Date.now() - startTime
-        });
+        // Registrar error en la base de datos
+        if (ctx.from?.id && githubUrl) {
+            await Database.supabase
+                .from('pdf_generations')
+                .insert([{
+                    telegram_id: ctx.from.id,
+                    repository_url: githubUrl,
+                    status: 'error',
+                    error_message: error instanceof Error ? error.message : 'Unknown error'
+                }]);
+        }
+        await handleError(error, ctx, 'Generate PDF');
     } finally {
-        currentProcesses--;
+        // Limpiar recursos y decrementar contador
+        if (fileStream) {
+            fileStream.destroy();
+        }
         if (pdfPath && fs.existsSync(pdfPath)) {
             try {
                 fs.unlinkSync(pdfPath);
                 console.log("Temporary PDF file deleted:", pdfPath);
             } catch (error) {
-                await handleError(error, ctx, 'Cleanup - Delete PDF');
+                console.error("Error deleting PDF file:", error);
             }
         }
+        currentProcesses--;
     }
 }
 
-export async function handleCancel(ctx: MyContext) {
+export async function handleCancel(ctx: MyContext): Promise<void> {
     try {
-        await deleteMessages(ctx, [...(ctx.session.botMessageIds || []), ...(ctx.session.userMessageIds || [])]);
-        await ctx.answerCallbackQuery("Operation cancelled");
+        await ctx.answerCallbackQuery('Operation cancelled');
+        await ctx.deleteMessage();
     } catch (error) {
         await handleError(error, ctx, 'Cancel Operation');
     }
 }
 
-export async function handleApproveUser(ctx: MyContext) {
-    if (!ctx.callbackQuery?.data || !ctx.from) return;
-    
-    const userId = Number(ctx.callbackQuery.data.replace('approve_user:', ''));
+export async function handleApproveUser(ctx: MyContext): Promise<void> {
     try {
-        await Database.updateUserStatus(userId, 'active');
-        await ctx.editMessageText(
-            "✅ User approved successfully!\n\n" +
-            "Original message:\n" +
-            ctx.callbackQuery.message?.text || ''
-        );
-        
+        if (!ctx.callbackQuery?.data) {
+            throw new Error('Invalid callback data');
+        }
+        const userId = Number(ctx.callbackQuery.data.split(':')[1]);
+        if (!userId) {
+            throw new Error('No user ID provided');
+        }
+
+        // Actualizar estado del usuario a activo
+        const { error: updateError } = await Database.supabase
+            .from('users_git2pdf_bot')
+            .update({ status: 'active' })
+            .eq('telegram_id', userId);
+
+        if (updateError) {
+            throw new Error(`Failed to update user status: ${updateError.message}`);
+        }
+
+        // Obtener información del usuario
+        const { data: userData } = await Database.supabase
+            .from('users_git2pdf_bot')
+            .select('username, first_name, last_name')
+            .eq('telegram_id', userId)
+            .single();
+
+        // Notificar al admin que la acción fue exitosa
+        await ctx.answerCallbackQuery('User approved successfully');
+
+        // Actualizar mensaje original con la información de aprobación
+        const approvalInfo = `✅ User Approved\n\nUser: ${userData?.username ? '@' + userData.username : userData?.first_name || 'Unknown'}\nID: ${userId}\nStatus: Active\nAction by: ${ctx.from?.username ? '@' + ctx.from.username : ctx.from?.first_name || 'Unknown'}`;
+        await ctx.editMessageText(approvalInfo);
+
         // Notificar al usuario que ha sido aprobado
-        const approvalMessage = await DynamicConfig.get('APPROVAL_MESSAGE', '✅ Your access request has been approved! You can now use the bot.');
-        await ctx.api.sendMessage(userId, approvalMessage);
+        try {
+            const approvalMessage = await dynamicConfig.getApprovalMessage();
+            await ctx.api.sendMessage(userId, approvalMessage);
+        } catch (error) {
+            console.error(`Failed to notify user ${userId} about approval:`, error);
+        }
+
+        // Notificar a otros admins
+        const admins = await Database.getAdmins();
+        const adminMessage = `User has been approved\n\n${approvalInfo}`;
+        
+        for (const admin of admins) {
+            // No notificar al admin que realizó la acción
+            if (admin.telegram_id !== ctx.from?.id) {
+                try {
+                    await ctx.api.sendMessage(admin.telegram_id, adminMessage);
+                } catch (error) {
+                    console.error(`Failed to notify admin ${admin.telegram_id}:`, error);
+                }
+            }
+        }
     } catch (error) {
         await handleError(error, ctx, 'Approve User');
     }
 }
 
-export async function handleRejectUser(ctx: MyContext) {
-    if (!ctx.callbackQuery?.data || !ctx.from) return;
-    
-    const userId = Number(ctx.callbackQuery.data.replace('reject_user:', ''));
+// Función auxiliar para manejar el rechazo de usuario
+async function handleUserRejection(userId: number, ctx: MyContext): Promise<void> {
+    // 1. Actualizar estado del usuario
+    const { error: updateError } = await Database.supabase
+        .from('users_git2pdf_bot')
+        .update({ 
+            status: 'rejected',
+            rejected_at: new Date().toISOString(),
+            rejected_by: ctx.from?.id,
+            rejection_reason: 'Admin rejection'
+        })
+        .eq('telegram_id', userId);
+
+    if (updateError) {
+        throw new Error(`Failed to update user status: ${updateError.message}`);
+    }
+
+    // 2. Limpiar datos de sesión si existen
+    const { error: deleteSessionError } = await Database.supabase
+        .from('user_sessions')
+        .delete()
+        .eq('telegram_id', userId);
+
+    if (deleteSessionError) {
+        console.error(`Failed to delete user session: ${deleteSessionError.message}`);
+    }
+
+    // 3. Registrar en historial
+    const { error: historyError } = await Database.supabase
+        .from('user_status_history')
+        .insert([{
+            telegram_id: userId,
+            status: 'rejected',
+            changed_by: ctx.from?.id,
+            change_reason: 'Admin rejection'
+        }]);
+
+    if (historyError) {
+        console.error(`Failed to record status history: ${historyError.message}`);
+    }
+}
+
+export async function handleRejectUser(ctx: MyContext): Promise<void> {
     try {
-        await Database.updateUserStatus(userId, 'banned');
-        await ctx.editMessageText(
-            "❌ User rejected!\n\n" +
-            "Original message:\n" +
-            ctx.callbackQuery.message?.text || ''
-        );
-        
+        if (!ctx.callbackQuery?.data) {
+            throw new Error('Invalid callback data');
+        }
+        const userId = Number(ctx.callbackQuery.data.split(':')[1]);
+        if (!userId) {
+            throw new Error('No user ID provided');
+        }
+
+        // Manejar el rechazo del usuario
+        await handleUserRejection(userId, ctx);
+
+        // Obtener información del usuario
+        const { data: userData } = await Database.supabase
+            .from('users_git2pdf_bot')
+            .select('username, first_name, last_name')
+            .eq('telegram_id', userId)
+            .single();
+
+        // Notificar al admin que la acción fue exitosa
+        await ctx.answerCallbackQuery('User rejected successfully');
+
+        // Actualizar mensaje original con la información de rechazo
+        const rejectionInfo = `❌ User Rejected\n\nUser: ${userData?.username ? '@' + userData.username : userData?.first_name || 'Unknown'}\nID: ${userId}\nStatus: Rejected\nAction by: ${ctx.from?.username ? '@' + ctx.from.username : ctx.from?.first_name || 'Unknown'}\nTime: ${new Date().toISOString()}`;
+        await ctx.editMessageText(rejectionInfo);
+
         // Notificar al usuario que ha sido rechazado
-        const rejectionMessage = await DynamicConfig.get('REJECTION_MESSAGE', '❌ Your access request has been denied. Contact the administrator for more information.');
-        await ctx.api.sendMessage(userId, rejectionMessage);
+        try {
+            const rejectionMessage = await dynamicConfig.getRejectionMessage();
+            await ctx.api.sendMessage(userId, rejectionMessage);
+        } catch (error) {
+            console.error(`Failed to notify user ${userId} about rejection:`, error);
+        }
+
+        // Notificar a otros admins
+        const admins = await Database.getAdmins();
+        const adminMessage = `User has been rejected\n\n${rejectionInfo}`;
+        
+        for (const admin of admins) {
+            // No notificar al admin que realizó la acción
+            if (admin.telegram_id !== ctx.from?.id) {
+                try {
+                    await ctx.api.sendMessage(admin.telegram_id, adminMessage);
+                } catch (error) {
+                    console.error(`Failed to notify admin ${admin.telegram_id}:`, error);
+                }
+            }
+        }
     } catch (error) {
         await handleError(error, ctx, 'Reject User');
     }

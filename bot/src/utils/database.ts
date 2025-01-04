@@ -25,6 +25,33 @@ interface RepoHistory {
     processing_time?: number;
 }
 
+interface BotLog {
+    id: number;
+    timestamp: Date;
+    level: 'error' | 'warn' | 'info';
+    message: string;
+    details?: any;
+    user_id?: number;
+    action?: string;
+}
+
+// Función de utilidad para reintentos
+async function withRetry<T>(operation: () => Promise<T>, maxRetries: number = 3, delay: number = 1000): Promise<T> {
+    let lastError;
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await operation();
+        } catch (error) {
+            lastError = error;
+            console.warn(`Attempt ${i + 1}/${maxRetries} failed:`, error);
+            if (i < maxRetries - 1) {
+                await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+            }
+        }
+    }
+    throw lastError;
+}
+
 export class Database {
     static readonly supabase = supabase;
 
@@ -43,18 +70,30 @@ export class Database {
     }
 
     static async getUser(telegramId: number): Promise<DatabaseUser | null> {
-        const { data, error } = await supabase
-            .from('users_git2pdf_bot')
-            .select('*')
-            .eq('telegram_id', telegramId)
-            .single();
+        try {
+            const result = await withRetry(async () => {
+                const { data, error } = await supabase
+                    .from('users_git2pdf_bot')
+                    .select('*')
+                    .eq('telegram_id', telegramId)
+                    .single();
 
-        if (error) {
-            console.error('Error fetching user:', error);
+                if (error) {
+                    console.error('Supabase error:', error);
+                    throw error;
+                }
+
+                return data;
+            });
+
+            return result;
+        } catch (error) {
+            console.error('Error fetching user:', {
+                message: error instanceof Error ? error.message : 'Unknown error',
+                details: error
+            });
             return null;
         }
-
-        return data;
     }
 
     static async createUser(user: {
@@ -176,5 +215,88 @@ export class Database {
         }
 
         return data || [];
+    }
+
+    static async addLog(log: Omit<BotLog, 'id' | 'timestamp'>): Promise<void> {
+        try {
+            await withRetry(async () => {
+                const { error } = await supabase
+                    .from('bot_logs')
+                    .insert([log]);
+
+                if (error) throw error;
+            });
+        } catch (error) {
+            console.error('Error adding log:', error);
+        }
+    }
+
+    static async getLogs(options: {
+        limit?: number;
+        offset?: number;
+        level?: BotLog['level'];
+        userId?: number;
+        startDate?: Date;
+        endDate?: Date;
+    } = {}): Promise<{ logs: BotLog[]; total: number }> {
+        try {
+            const {
+                limit = 50,
+                offset = 0,
+                level,
+                userId,
+                startDate,
+                endDate
+            } = options;
+
+            let query = supabase
+                .from('bot_logs')
+                .select('*', { count: 'exact' });
+
+            if (level) {
+                query = query.eq('level', level);
+            }
+            if (userId) {
+                query = query.eq('user_id', userId);
+            }
+            if (startDate) {
+                query = query.gte('timestamp', startDate.toISOString());
+            }
+            if (endDate) {
+                query = query.lte('timestamp', endDate.toISOString());
+            }
+
+            const { data, error, count } = await query
+                .order('timestamp', { ascending: false })
+                .range(offset, offset + limit - 1);
+
+            if (error) throw error;
+
+            return {
+                logs: data || [],
+                total: count || 0
+            };
+        } catch (error) {
+            console.error('Error fetching logs:', error);
+            return { logs: [], total: 0 };
+        }
+    }
+
+    static async clearOldLogs(daysToKeep: number = 30): Promise<void> {
+        try {
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+
+            await withRetry(async () => {
+                const { error } = await supabase
+                    .from('bot_logs')
+                    .delete()
+                    .lt('timestamp', cutoffDate.toISOString());
+
+                if (error) throw error;
+            });
+        } catch (error) {
+            console.error('Error clearing old logs:', error);
+        }
     }
 } 
