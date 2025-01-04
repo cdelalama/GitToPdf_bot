@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.dynamicConfig = exports.config = void 0;
 const dotenv = __importStar(require("dotenv"));
 const dynamicConfig_1 = require("../utils/dynamicConfig");
+const database_1 = require("../utils/database");
 // Cargar las variables de entorno
 dotenv.config();
 // Configuración estática (variables de entorno)
@@ -56,8 +57,15 @@ exports.dynamicConfig = {
         return await dynamicConfig_1.DynamicConfig.get('GITHUB_CLONE_TIMEOUT_MS', 300000);
     },
     async getAllowedUsers() {
-        const allowedUsersStr = await dynamicConfig_1.DynamicConfig.get('ALLOWED_USERS', process.env.ALLOWED_USERS || '');
-        return allowedUsersStr.split(',').map(user => user.trim()).filter(user => user.length > 0);
+        const { data, error } = await database_1.Database.supabase
+            .from('users_git2pdf_bot')
+            .select('telegram_id')
+            .eq('status', 'active');
+        if (error) {
+            console.error('Error getting allowed users:', error);
+            return [];
+        }
+        return data.map((user) => user.telegram_id);
     },
     async getMaxPdfSizeMb() {
         return await dynamicConfig_1.DynamicConfig.get('MAX_PDF_SIZE_MB', 10);

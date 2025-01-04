@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.webAppSecurityMiddleware = webAppSecurityMiddleware;
 const webAppSecurity_1 = require("../utils/webAppSecurity");
+const dynamicConfig_1 = require("../utils/dynamicConfig");
 async function webAppSecurityMiddleware(ctx, next) {
     try {
         // Check if the update contains WebApp data
@@ -12,13 +13,15 @@ async function webAppSecurityMiddleware(ctx, next) {
         // Validate the initialization data
         const isValid = webAppSecurity_1.WebAppSecurity.validateInitData(webAppData.data);
         if (!isValid) {
-            await ctx.reply('⚠️ Invalid WebApp data received. Please try again.');
+            const invalidMessage = await dynamicConfig_1.DynamicConfig.get('INVALID_WEBAPP_MESSAGE', '⚠️ Invalid WebApp data received. Please try again.');
+            await ctx.reply(invalidMessage);
             return;
         }
         // Parse the data for use in subsequent handlers
         const parsedData = webAppSecurity_1.WebAppSecurity.parseInitData(webAppData.data);
         if (!parsedData) {
-            await ctx.reply('⚠️ Could not process WebApp data. Please try again.');
+            const errorMessage = await dynamicConfig_1.DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
+            await ctx.reply(errorMessage);
             return;
         }
         // Attach the parsed data to the context for use in handlers
@@ -27,6 +30,7 @@ async function webAppSecurityMiddleware(ctx, next) {
     }
     catch (error) {
         console.error('Error in WebApp security middleware:', error);
-        await ctx.reply('⚠️ An error occurred while processing your request. Please try again.');
+        const errorMessage = await dynamicConfig_1.DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
+        await ctx.reply(errorMessage);
     }
 }

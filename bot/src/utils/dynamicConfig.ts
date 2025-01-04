@@ -40,29 +40,56 @@ export class DynamicConfig {
     }
 
     static async get<T>(key: string, defaultValue: T): Promise<T> {
-        await this.refreshCache();
-        return this.cache.has(key) ? this.cache.get(key) : defaultValue;
+        try {
+            const { data, error } = await Database.supabase
+                .from('bot_config')
+                .select('value, type')
+                .eq('key', key)
+                .single();
+
+            if (error || !data) {
+                console.log(`Using default value for ${key}:`, defaultValue);
+                return defaultValue;
+            }
+
+            // Si es AUTO_APPROVE_USERS, logear el cambio
+            if (key === 'AUTO_APPROVE_USERS') {
+                console.log(`Auto-approve users setting: ${data.value}`);
+            }
+
+            switch (data.type) {
+                case 'number':
+                    return Number(data.value) as T;
+                case 'boolean':
+                    return (data.value.toLowerCase() === 'true') as T;
+                case 'json':
+                    return JSON.parse(data.value) as T;
+                default:
+                    return data.value as T;
+            }
+        } catch (error) {
+            console.error(`Error getting config ${key}:`, error);
+            return defaultValue;
+        }
     }
 
-    static async set(key: string, value: any, type: string = 'string', description?: string, updatedBy?: number): Promise<void> {
-        const stringValue = type === 'json' ? JSON.stringify(value) : String(value);
-        
-        const { error } = await Database.supabase
-            .from('bot_config')
-            .upsert({
-                key,
-                value: stringValue,
-                type,
-                description,
-                updated_by: updatedBy,
-                updated_at: new Date()
-            });
+    static async set(key: string, value: any): Promise<void> {
+        try {
+            const { error } = await Database.supabase
+                .from('bot_config')
+                .update({ value: String(value) })
+                .eq('key', key);
 
-        if (error) throw error;
-        
-        // Actualizar cache
-        this.cache.set(key, value);
-        this.lastFetch = Date.now();
+            if (error) throw error;
+
+            // Si es AUTO_APPROVE_USERS, logear el cambio
+            if (key === 'AUTO_APPROVE_USERS') {
+                console.log(`Auto-approve users setting changed to: ${value}`);
+            }
+        } catch (error) {
+            console.error(`Error setting config ${key}:`, error);
+            throw error;
+        }
     }
 
     static async delete(key: string): Promise<void> {

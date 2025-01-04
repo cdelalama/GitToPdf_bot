@@ -5,6 +5,7 @@ import path from "path";
 import { githubToPdf } from "../modules/githubToPdf";
 import { Database } from "../utils/database";
 import { deleteMessages, deleteMessageAfterTimeout } from "../utils/messages";
+import { DynamicConfig } from "../utils/dynamicConfig";
 
 export async function handleGeneratePdf(ctx: MyContext) {
     if (!ctx.callbackQuery?.data || !ctx.from) return;
@@ -25,7 +26,8 @@ export async function handleGeneratePdf(ctx: MyContext) {
         }
 
         if (!githubUrl.startsWith('https://github.com')) {
-            throw new Error("Invalid GitHub URL");
+            const invalidUrlMessage = await DynamicConfig.get('INVALID_URL_MESSAGE', '⚠️ Please send a valid GitHub repository URL.');
+            throw new Error(invalidUrlMessage);
         }
         
         pdfPath = await githubToPdf(githubUrl);
@@ -42,19 +44,21 @@ export async function handleGeneratePdf(ctx: MyContext) {
             Database.incrementPdfCount(userId)
         ]);
 
+        const successMessage = await DynamicConfig.get('SUCCESS_MESSAGE', 'Your PDF has been generated successfully!');
         const fileStream = fs.createReadStream(pdfPath);
-        await ctx.replyWithDocument(new InputFile(fileStream, path.basename(pdfPath)));
+        await ctx.replyWithDocument(new InputFile(fileStream, path.basename(pdfPath)), {
+            caption: successMessage
+        });
         fileStream.close();
         
-    } catch (error: any) {
-        await Database.logRepoProcess({
-            telegram_user_id: userId,
-            repo_url: githubUrl,
-            status: 'failed',
-            error_message: error.message
-        });
-        const errorMsg = await ctx.reply(`Error: ${error.message || "Unknown error occurred"}. Please try again.`);
-        ctx.session.botMessageIds = [...(ctx.session.botMessageIds || []), errorMsg.message_id];
+    } catch (error) {
+        console.error("Error generating PDF:", error);
+        const errorMessage = await DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
+        const errorMsg = await ctx.reply(errorMessage);
+        
+        if (errorMsg.message_id) {
+            ctx.session.botMessageIds = [...(ctx.session.botMessageIds || []), errorMsg.message_id];
+        }
     } finally {
         if (pdfPath && fs.existsSync(pdfPath)) {
             try {
@@ -73,7 +77,8 @@ export async function handleCancel(ctx: MyContext) {
         await ctx.answerCallbackQuery("Operation cancelled");
     } catch (error) {
         console.error("Error cancelling operation:", error);
-        await ctx.answerCallbackQuery();
+        const errorMessage = await DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
+        await ctx.answerCallbackQuery(errorMessage);
     }
 }
 
@@ -90,12 +95,12 @@ export async function handleApproveUser(ctx: MyContext) {
         );
         
         // Notificar al usuario que ha sido aprobado
-        await ctx.api.sendMessage(userId, 
-            "✅ Your access request has been approved! You can now use the bot."
-        );
+        const approvalMessage = await DynamicConfig.get('APPROVAL_MESSAGE', '✅ Your access request has been approved! You can now use the bot.');
+        await ctx.api.sendMessage(userId, approvalMessage);
     } catch (error) {
         console.error("Error approving user:", error);
-        await ctx.answerCallbackQuery("Error approving user");
+        const errorMessage = await DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
+        await ctx.answerCallbackQuery(errorMessage);
     }
 }
 
@@ -112,11 +117,11 @@ export async function handleRejectUser(ctx: MyContext) {
         );
         
         // Notificar al usuario que ha sido rechazado
-        await ctx.api.sendMessage(userId, 
-            "❌ Your access request has been denied. Contact the administrator for more information."
-        );
+        const rejectionMessage = await DynamicConfig.get('REJECTION_MESSAGE', '❌ Your access request has been denied. Contact the administrator for more information.');
+        await ctx.api.sendMessage(userId, rejectionMessage);
     } catch (error) {
         console.error("Error rejecting user:", error);
-        await ctx.answerCallbackQuery("Error rejecting user");
+        const errorMessage = await DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
+        await ctx.answerCallbackQuery(errorMessage);
     }
 } 

@@ -2,6 +2,7 @@ import { MyContext } from "../types/context";
 import { config } from "../config/config";
 import { notifyAdmin } from "./messages";
 import { Database } from "./database";
+import { dynamicConfig } from "../config/config";
 
 export async function isUserAuthorized(ctx: MyContext): Promise<boolean> {
     const userId = ctx.from?.id;
@@ -16,7 +17,7 @@ export async function isUserAuthorized(ctx: MyContext): Promise<boolean> {
     let user = await Database.getUser(userId);
     console.log("User from database:", user);
     
-    // Si el usuario no existe, crearlo como pendiente
+    // Si el usuario no existe, crearlo y manejar auto-aprobación
     if (!user) {
         user = await Database.createUser({
             telegram_id: userId,
@@ -25,6 +26,28 @@ export async function isUserAuthorized(ctx: MyContext): Promise<boolean> {
             last_name: ctx.from?.last_name,
             language_code: ctx.from?.language_code
         });
+
+        // Comprobar auto-aprobación
+        try {
+            const autoApprove = await dynamicConfig.getAutoApproveUsers();
+            if (autoApprove) {
+                console.log(`Auto-approving user ${userId}`);
+                await Database.updateUserStatus(userId, 'active');
+                await ctx.reply(
+                    "✅ Welcome! You've been automatically approved to use the bot.\n" +
+                    "Send me a GitHub repository URL to generate a PDF."
+                );
+                return true;
+            } else {
+                console.log(`User ${userId} needs manual approval`);
+                await handleUnauthorized(ctx);
+                return false;
+            }
+        } catch (error) {
+            console.error("Error in auto-approval process:", error);
+            await handleUnauthorized(ctx);
+            return false;
+        }
     }
 
     // Actualizar última interacción
@@ -53,15 +76,18 @@ export async function handleUnauthorized(ctx: MyContext): Promise<void> {
         console.log("Sending admin notification...");
         await notifyAdmin(ctx, "Bot Access Request");
         
-        // Borrar el mensaje después de 30 segundos
+        // Borrar el mensaje después del tiempo configurado
         if (ctx.chat?.id && response.message_id) {
+            const deleteTimeout = await dynamicConfig.getDeleteMessageTimeout();
+            console.log(`Message will be deleted after ${deleteTimeout}ms`);
+            
             setTimeout(async () => {
                 try {
                     await ctx.api.deleteMessage(ctx.chat!.id, response.message_id);
                 } catch (error) {
                     console.error("Error deleting unauthorized message:", error);
                 }
-            }, 30000); // Aumentado a 30 segundos para dar tiempo a leer
+            }, deleteTimeout);
         }
     } catch (error) {
         console.error("Error handling unauthorized access:", error);

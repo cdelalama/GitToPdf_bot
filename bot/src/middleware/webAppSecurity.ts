@@ -1,6 +1,7 @@
 import { NextFunction } from 'grammy';
 import { WebAppSecurity } from '../utils/webAppSecurity';
 import { CustomContext } from '../types/context';
+import { DynamicConfig } from '../utils/dynamicConfig';
 
 export async function webAppSecurityMiddleware(ctx: CustomContext, next: NextFunction) {
     try {
@@ -13,14 +14,16 @@ export async function webAppSecurityMiddleware(ctx: CustomContext, next: NextFun
         // Validate the initialization data
         const isValid = WebAppSecurity.validateInitData(webAppData.data);
         if (!isValid) {
-            await ctx.reply('⚠️ Invalid WebApp data received. Please try again.');
+            const invalidMessage = await DynamicConfig.get('INVALID_WEBAPP_MESSAGE', '⚠️ Invalid WebApp data received. Please try again.');
+            await ctx.reply(invalidMessage);
             return;
         }
 
         // Parse the data for use in subsequent handlers
         const parsedData = WebAppSecurity.parseInitData(webAppData.data);
         if (!parsedData) {
-            await ctx.reply('⚠️ Could not process WebApp data. Please try again.');
+            const errorMessage = await DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
+            await ctx.reply(errorMessage);
             return;
         }
 
@@ -30,6 +33,7 @@ export async function webAppSecurityMiddleware(ctx: CustomContext, next: NextFun
         return next();
     } catch (error) {
         console.error('Error in WebApp security middleware:', error);
-        await ctx.reply('⚠️ An error occurred while processing your request. Please try again.');
+        const errorMessage = await DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
+        await ctx.reply(errorMessage);
     }
 } 

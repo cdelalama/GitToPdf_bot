@@ -1,5 +1,6 @@
 import * as dotenv from "dotenv";
 import { DynamicConfig } from "../utils/dynamicConfig";
+import { Database } from "../utils/database";
 
 // Cargar las variables de entorno
 dotenv.config();
@@ -24,9 +25,18 @@ export const dynamicConfig = {
         return await DynamicConfig.get('GITHUB_CLONE_TIMEOUT_MS', 300000);
     },
 
-    async getAllowedUsers(): Promise<string[]> {
-        const allowedUsersStr = await DynamicConfig.get('ALLOWED_USERS', process.env.ALLOWED_USERS || '');
-        return allowedUsersStr.split(',').map(user => user.trim()).filter(user => user.length > 0);
+    async getAllowedUsers(): Promise<number[]> {
+        const { data, error } = await Database.supabase
+            .from('users_git2pdf_bot')
+            .select('telegram_id')
+            .eq('status', 'active');
+        
+        if (error) {
+            console.error('Error getting allowed users:', error);
+            return [];
+        }
+
+        return data.map((user: { telegram_id: number }) => user.telegram_id);
     },
 
     async getMaxPdfSizeMb(): Promise<number> {

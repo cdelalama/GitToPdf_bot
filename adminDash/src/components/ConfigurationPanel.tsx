@@ -7,21 +7,13 @@ import { Switch } from './ui/switch';
 import { Loader2 } from 'lucide-react';
 import { useToast } from './ui/use-toast';
 import DashboardLayout from './DashboardLayout';
-
-interface ConfigItem {
-    key: string;
-    value: string;
-    description: string | null;
-    type: 'string' | 'number' | 'boolean' | 'json';
-    updated_at: string;
-    updated_by: number | null;
-}
+import { ConfigItem } from '../types/config';
 
 export const ConfigurationPanel = () => {
     const { configs, isLoading, error, updateConfig } = useConfig();
     const { toast } = useToast();
 
-    const handleValueChange = async (key: string, value: string, type: 'string' | 'number' | 'boolean' | 'json') => {
+    const handleValueChange = async (key: string, value: string, type: ConfigItem['type']) => {
         try {
             await updateConfig.mutateAsync({ key, value, type });
             toast({

@@ -1,14 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../supabaseClient';
-
-interface ConfigItem {
-    key: string;
-    value: string;
-    description: string | null;
-    type: 'string' | 'number' | 'boolean' | 'json';
-    updated_at: string;
-    updated_by: number | null;
-}
+import { ConfigItem } from '../types/config';
 
 export const useConfig = () => {
     const queryClient = useQueryClient();
