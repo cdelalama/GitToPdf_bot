@@ -32,15 +32,22 @@ export async function githubToPdf(repoUrl: string): Promise<string> {
         });
         await Promise.race([clonePromise, timeoutPromise]);
 
-        // Obtener tipos de archivo excluidos
+        // Obtener configuraciones
         const excludedTypes = await DynamicConfig.get('EXCLUDED_FILE_TYPES', ['jpg', 'png', 'gif', 'mp4', 'zip', 'exe']);
         const maxFileSizeKb = await DynamicConfig.get('MAX_FILE_SIZE_KB', 1000);
+        const maxPdfSizeMb = await DynamicConfig.get('MAX_PDF_SIZE_MB', 10);
 
         // Crear un PDF
         console.log(`Generating PDF: ${pdfPath}`);
         const doc = new PDFDocument();
         const writeStream = fs.createWriteStream(pdfPath);
         doc.pipe(writeStream);
+
+        let currentPdfSize = 0;
+        let skippedFiles = {
+            bySize: [] as string[],
+            byType: [] as string[]
+        };
 
         // Función recursiva para procesar directorios
         async function processDirectory(dirPath: string, relativePath: string = '') {
@@ -58,20 +65,42 @@ export async function githubToPdf(repoUrl: string): Promise<string> {
                     const ext = path.extname(file).toLowerCase().replace('.', '');
                     const fileSizeKb = stats.size / 1024;
 
-                    if (!excludedTypes.includes(ext) && fileSizeKb <= maxFileSizeKb) {
-                        try {
-                            const content = fs.readFileSync(filePath, "utf-8");
-                            doc.addPage()
-                               .font("Courier")
-                               .fontSize(12)
-                               .text(`File: ${fileRelativePath}\n\n${content}`);
-                        } catch (error: any) {
-                            console.warn(`Could not read file ${fileRelativePath}: ${error.message}`);
-                            doc.addPage()
-                               .font("Courier")
-                               .fontSize(12)
-                               .text(`File: ${fileRelativePath}\n\nCould not read file contents (possibly binary or encoded file)`);
+                    if (excludedTypes.includes(ext)) {
+                        skippedFiles.byType.push(fileRelativePath);
+                        continue;
+                    }
+
+                    if (fileSizeKb > maxFileSizeKb) {
+                        console.warn(`Skipping large file: ${fileRelativePath} (${fileSizeKb.toFixed(2)}KB > ${maxFileSizeKb}KB)`);
+                        skippedFiles.bySize.push(fileRelativePath);
+                        continue;
+                    }
+
+                    try {
+                        const content = fs.readFileSync(filePath, "utf-8");
+                        
+                        // Estimar el tamaño que se añadirá al PDF
+                        const contentSizeBytes = Buffer.from(content).length + fileRelativePath.length + 100; // 100 bytes extra por formato
+                        currentPdfSize += contentSizeBytes;
+
+                        // Verificar si excedemos el tamaño máximo del PDF
+                        if (currentPdfSize / (1024 * 1024) > maxPdfSizeMb) {
+                            throw new Error(`PDF would exceed maximum allowed size of ${maxPdfSizeMb}MB`);
                         }
+
+                        doc.addPage()
+                           .font("Courier")
+                           .fontSize(12)
+                           .text(`File: ${fileRelativePath}\n\n${content}`);
+                    } catch (error: any) {
+                        if (error.message.includes('maximum allowed size')) {
+                            throw error; // Re-lanzar error de tamaño máximo
+                        }
+                        console.warn(`Could not read file ${fileRelativePath}: ${error.message}`);
+                        doc.addPage()
+                           .font("Courier")
+                           .fontSize(12)
+                           .text(`File: ${fileRelativePath}\n\nCould not read file contents (possibly binary or encoded file)`);
                     }
                 }
             }
@@ -79,6 +108,21 @@ export async function githubToPdf(repoUrl: string): Promise<string> {
 
         // Procesar el repositorio
         await processDirectory(repoPath);
+
+        // Añadir resumen de archivos omitidos al final del PDF
+        if (skippedFiles.bySize.length > 0 || skippedFiles.byType.length > 0) {
+            doc.addPage()
+               .font("Courier")
+               .fontSize(12)
+               .text("Skipped Files Summary:\n\n");
+
+            if (skippedFiles.bySize.length > 0) {
+                doc.text(`Files skipped due to size (>${maxFileSizeKb}KB):\n${skippedFiles.bySize.join('\n')}\n\n`);
+            }
+            if (skippedFiles.byType.length > 0) {
+                doc.text(`Files skipped due to type:\n${skippedFiles.byType.join('\n')}`);
+            }
+        }
 
         doc.end();
         await new Promise((resolve) => writeStream.on("finish", resolve));

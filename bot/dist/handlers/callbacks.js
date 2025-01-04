@@ -75,6 +75,12 @@ async function handleGeneratePdf(ctx) {
         }
         pdfPath = await (0, githubToPdf_1.githubToPdf)(githubUrl);
         const pdfSize = fs.statSync(pdfPath).size;
+        const pdfSizeMb = pdfSize / (1024 * 1024);
+        // Verificar tamaño máximo del PDF
+        const maxPdfSizeMb = await dynamicConfig_1.DynamicConfig.get('MAX_PDF_SIZE_MB', 10);
+        if (pdfSizeMb > maxPdfSizeMb) {
+            throw new Error(`PDF size (${pdfSizeMb.toFixed(2)}MB) exceeds maximum allowed size (${maxPdfSizeMb}MB)`);
+        }
         await Promise.all([
             database_1.Database.logRepoProcess({
                 telegram_user_id: userId,
