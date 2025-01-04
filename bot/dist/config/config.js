@@ -33,22 +33,69 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.config = void 0;
+exports.dynamicConfig = exports.config = void 0;
 const dotenv = __importStar(require("dotenv"));
+const dynamicConfig_1 = require("../utils/dynamicConfig");
 // Cargar las variables de entorno
 dotenv.config();
+// Configuración estática (variables de entorno)
 exports.config = {
     telegramToken: process.env.TELEGRAM_BOT_TOKEN || "",
-    tempDir: "./temp", // Carpeta temporal para los archivos del bot
-    githubCloneTimeout: 300000, // Tiempo límite para clonar repos (en ms)
-    // Lista de usuarios permitidos (usernames o IDs)
-    allowedUsers: (process.env.ALLOWED_USERS || "")
-        .split(",")
-        .map(user => user.trim())
-        .filter(user => user.length > 0),
     githubToken: process.env.GITHUB_TOKEN,
     supabaseUrl: process.env.SUPABASE_URL || '',
     supabaseKey: process.env.SUPABASE_KEY || '',
     webAppUrl: process.env.WEBAPP_URL || 'https://8894-80-102-3-93.ngrok-free.app',
     webAppToken: process.env.WEBAPP_TOKEN || '', // Token para validar las solicitudes
+};
+// Configuración dinámica (desde la base de datos)
+exports.dynamicConfig = {
+    async getTempDir() {
+        return await dynamicConfig_1.DynamicConfig.get('TEMP_DIR', './temp');
+    },
+    async getGithubCloneTimeout() {
+        return await dynamicConfig_1.DynamicConfig.get('GITHUB_CLONE_TIMEOUT_MS', 300000);
+    },
+    async getAllowedUsers() {
+        const allowedUsersStr = await dynamicConfig_1.DynamicConfig.get('ALLOWED_USERS', process.env.ALLOWED_USERS || '');
+        return allowedUsersStr.split(',').map(user => user.trim()).filter(user => user.length > 0);
+    },
+    async getMaxPdfSizeMb() {
+        return await dynamicConfig_1.DynamicConfig.get('MAX_PDF_SIZE_MB', 10);
+    },
+    async getMaxConcurrentProcesses() {
+        return await dynamicConfig_1.DynamicConfig.get('MAX_CONCURRENT_PROCESSES', 3);
+    },
+    async getPdfDefaultFontSize() {
+        return await dynamicConfig_1.DynamicConfig.get('PDF_DEFAULT_FONT_SIZE', 12);
+    },
+    async getPdfLineNumbers() {
+        return await dynamicConfig_1.DynamicConfig.get('PDF_LINE_NUMBERS', true);
+    },
+    async getPdfIncludeCommitInfo() {
+        return await dynamicConfig_1.DynamicConfig.get('PDF_INCLUDE_COMMIT_INFO', true);
+    },
+    async getExcludedFileTypes() {
+        return await dynamicConfig_1.DynamicConfig.get('EXCLUDED_FILE_TYPES', ['jpg', 'png', 'gif', 'mp4', 'zip', 'exe']);
+    },
+    async getMaxFileSizeKb() {
+        return await dynamicConfig_1.DynamicConfig.get('MAX_FILE_SIZE_KB', 1000);
+    },
+    async getDeleteMessageTimeout() {
+        return await dynamicConfig_1.DynamicConfig.get('DELETE_MESSAGE_TIMEOUT_MS', 5000);
+    },
+    async getAutoApproveUsers() {
+        return await dynamicConfig_1.DynamicConfig.get('AUTO_APPROVE_USERS', false);
+    },
+    async getNotifyAdminsOnError() {
+        return await dynamicConfig_1.DynamicConfig.get('NOTIFY_ADMINS_ON_ERROR', true);
+    },
+    async getWelcomeMessage() {
+        return await dynamicConfig_1.DynamicConfig.get('WELCOME_MESSAGE', 'Welcome to Git2PDF Bot! Send me a GitHub repository URL to generate a PDF.');
+    },
+    async getErrorMessage() {
+        return await dynamicConfig_1.DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again or contact an admin if the problem persists.');
+    },
+    async getSuccessMessage() {
+        return await dynamicConfig_1.DynamicConfig.get('SUCCESS_MESSAGE', 'Your PDF has been generated successfully!');
+    }
 };

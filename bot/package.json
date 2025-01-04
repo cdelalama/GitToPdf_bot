@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "tsc": "tsc -w --skipLibCheck",
-    "dev": "nodemon --watch src --ignore temp/ --ignore 'temp/**/*' --ext ts,js,json --exec ts-node -- src/bot.ts"
+    "dev": "nodemon --watch src --ignore temp/ --ignore 'temp/**/*' --ext ts,js,json --exec ts-node -- src/bot.ts",
+    "init-config": "ts-node src/scripts/initConfig.ts"
   },
   "repository": {
     "type": "git",

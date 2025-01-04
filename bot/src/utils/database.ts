@@ -1,8 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
-import { config } from '../config/config';
 import { DatabaseUser, UserStatus } from '../types/database';
+import * as dotenv from "dotenv";
 
-const supabase = createClient(config.supabaseUrl, config.supabaseKey);
+// Cargar las variables de entorno
+dotenv.config();
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Missing Supabase environment variables');
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface RepoHistory {
     id: number;

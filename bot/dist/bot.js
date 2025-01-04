@@ -2,49 +2,72 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const grammy_1 = require("grammy");
 const config_1 = require("./config/config");
+const dynamicConfig_1 = require("./utils/dynamicConfig");
 const context_1 = require("./types/context");
 const auth_1 = require("./utils/auth");
 const commands_1 = require("./handlers/commands");
 const messages_1 = require("./handlers/messages");
 const callbacks_1 = require("./handlers/callbacks");
-const webAppAuth_1 = require("./middleware/webAppAuth");
-if (!config_1.config.telegramToken) {
-    throw new Error("TELEGRAM_BOT_TOKEN is not defined in .env file");
+const webAppSecurity_1 = require("./middleware/webAppSecurity");
+async function startBot() {
+    try {
+        if (!config_1.config.telegramToken) {
+            throw new Error("TELEGRAM_BOT_TOKEN is not defined in .env file");
+        }
+        const bot = new grammy_1.Bot(config_1.config.telegramToken);
+        // Cargar configuraciones dinámicas
+        const welcomeMessage = await dynamicConfig_1.DynamicConfig.get('WELCOME_MESSAGE', 'Welcome to Git2PDF Bot!');
+        const errorMessage = await dynamicConfig_1.DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
+        const deleteTimeout = await dynamicConfig_1.DynamicConfig.get('DELETE_MESSAGE_TIMEOUT_MS', 5000);
+        bot.use((0, grammy_1.session)({ initial: () => context_1.initialSession }));
+        // Middleware de autorización
+        bot.use(async (ctx, next) => {
+            console.log("Authorization middleware triggered");
+            if (await (0, auth_1.isUserAuthorized)(ctx)) {
+                await next();
+            }
+            else {
+                console.log("User not authorized, handling...");
+                await (0, auth_1.handleUnauthorized)(ctx);
+            }
+        });
+        // Middleware para validar solicitudes de la TWA
+        bot.use(webAppSecurity_1.webAppSecurityMiddleware);
+        // Command handlers
+        bot.command("start", commands_1.handleStart);
+        bot.command("webapp", commands_1.handleWebApp);
+        // Message handlers
+        bot.on("message:text", messages_1.handleTextMessage);
+        // Callback handlers
+        bot.callbackQuery(/^generate_pdf:/, callbacks_1.handleGeneratePdf);
+        bot.callbackQuery(/^cancel:/, callbacks_1.handleCancel);
+        bot.callbackQuery(/^approve_user:/, callbacks_1.handleApproveUser);
+        bot.callbackQuery(/^reject_user:/, callbacks_1.handleRejectUser);
+        // Error handler
+        bot.catch(async (err) => {
+            console.error("Bot error occurred:", err);
+            const notifyAdmins = await dynamicConfig_1.DynamicConfig.get('NOTIFY_ADMINS_ON_ERROR', true);
+            if (notifyAdmins) {
+                // Implementar notificación a admins
+            }
+            if (err.ctx) {
+                await err.ctx.reply(errorMessage, {
+                    reply_to_message_id: err.ctx.msg?.message_id
+                });
+            }
+        });
+        // Start the bot
+        console.log("Starting bot...");
+        await bot.start({
+            onStart: (botInfo) => {
+                console.log(`Bot ${botInfo.username} started successfully!`);
+            },
+            drop_pending_updates: true
+        });
+    }
+    catch (error) {
+        console.error('Failed to start bot:', error);
+        process.exit(1);
+    }
 }
-const bot = new grammy_1.Bot(config_1.config.telegramToken);
-bot.use((0, grammy_1.session)({ initial: () => context_1.initialSession }));
-bot.use(async (ctx, next) => {
-    console.log("Authorization middleware triggered");
-    if (await (0, auth_1.isUserAuthorized)(ctx)) {
-        await next();
-    }
-    else {
-        console.log("User not authorized, handling...");
-        await (0, auth_1.handleUnauthorized)(ctx);
-    }
-});
-// Command handlers
-bot.command("start", commands_1.handleStart);
-bot.command("webapp", commands_1.handleWebApp);
-// Message handlers
-bot.on("message:text", messages_1.handleTextMessage);
-// Callback handlers
-bot.callbackQuery(/^generate_pdf:/, callbacks_1.handleGeneratePdf);
-bot.callbackQuery(/^cancel:/, callbacks_1.handleCancel);
-bot.callbackQuery(/^approve_user:/, callbacks_1.handleApproveUser);
-bot.callbackQuery(/^reject_user:/, callbacks_1.handleRejectUser);
-// Middleware para validar solicitudes de la TWA
-bot.use(webAppAuth_1.webAppAuth);
-// Error handler
-bot.catch((err) => {
-    console.error("Bot error occurred:", err);
-});
-// Start the bot
-console.log("Starting bot...");
-bot.start({
-    onStart: (botInfo) => {
-        console.log("Bot started successfully!");
-        console.log("Bot username:", botInfo.username);
-    },
-    drop_pending_updates: true
-});
+startBot();
