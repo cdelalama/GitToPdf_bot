@@ -28,7 +28,7 @@ VALUES
     ('INVALID_REPO_MESSAGE', '⚠️ This repository is not accessible. Make sure it exists and is public.', 'Mensaje de error para repos inválidos', 'string'),
 
     -- Mensajes de interacción
-    ('WELCOME_MESSAGE', 'Welcome to Git2PDF Bot! Send me a GitHub repository URL to generate a PDF.', 'Mensaje de bienvenida', 'string'),
+    ('WELCOME_MESSAGE', E'Welcome to GitToPDFBot! 📚\n\nI convert GitHub repositories into PDF documents, making it easy to:\n• Read code offline\n• Share code documentation\n• Review repositories\n• Feed code context to LLMs (ChatGPT, Claude, etc.)\n\nJust send me a GitHub repository URL and I''ll generate a PDF with its contents.\n\n🔜 Coming soon: Direct integration with ChatGPT to analyze repositories!\n\nExample: https://github.com/username/repository\n\n🔐 Admin: Use the dashboard to manage users and monitor bot usage.', 'Mensaje de bienvenida', 'string'),
     ('SUCCESS_MESSAGE', 'Your PDF has been generated successfully!', 'Mensaje de éxito', 'string'),
     ('ACTION_PROMPT_MESSAGE', 'What would you like to do with this repository?', 'Mensaje de prompt para acciones', 'string'),
     

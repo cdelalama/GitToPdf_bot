@@ -92,9 +92,7 @@ async function initializeConfigs() {
         for (const config of defaultConfigs) {
             await DynamicConfig.set(
                 config.key,
-                config.value,
-                config.type as 'string' | 'number' | 'boolean' | 'json',
-                config.description
+                config.value
             );
             console.log(`✅ Initialized ${config.key}`);
         }

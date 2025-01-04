@@ -3,6 +3,7 @@ import { config } from "../config/config";
 import { notifyAdmin } from "./messages";
 import { Database } from "./database";
 import { dynamicConfig } from "../config/config";
+import { DynamicConfig } from "../utils/dynamicConfig";
 
 export async function isUserAuthorized(ctx: MyContext): Promise<boolean> {
     const userId = ctx.from?.id;
@@ -33,10 +34,8 @@ export async function isUserAuthorized(ctx: MyContext): Promise<boolean> {
             if (autoApprove) {
                 console.log(`Auto-approving user ${userId}`);
                 await Database.updateUserStatus(userId, 'active');
-                await ctx.reply(
-                    "✅ Welcome! You've been automatically approved to use the bot.\n" +
-                    "Send me a GitHub repository URL to generate a PDF."
-                );
+                const approvalMessage = await DynamicConfig.get('APPROVAL_MESSAGE', '✅ Your access request has been approved! You can now use the bot.');
+                await ctx.reply(approvalMessage);
                 return true;
             } else {
                 console.log(`User ${userId} needs manual approval`);
@@ -65,12 +64,14 @@ export async function handleUnauthorized(ctx: MyContext): Promise<void> {
     try {
         console.log("Handling unauthorized access for user:", ctx.from?.id);
         const username = ctx.from?.username;
+        const welcomeMessage = await DynamicConfig.get('WELCOME_MESSAGE', 'Welcome to Git2PDF Bot! Send me a GitHub repository URL to generate a PDF.');
+        const pendingMessage = await DynamicConfig.get('PENDING_MESSAGE', '⏳ Your access request is being reviewed. You will be notified when processed.');
+        
         const response = await ctx.reply(
             `👋 Hello${username ? ` @${username}` : ''}!\n\n` +
-            `This bot converts GitHub repositories into PDF documents, making it easy to read and share code offline. ` +
-            `Perfect for code reviews, documentation, and feeding context to AI tools like ChatGPT!\n\n` +
+            welcomeMessage + '\n\n' +
             `🔒 For security reasons, access is restricted. I've sent your access request to the administrator.\n\n` +
-            `⏳ Please wait for approval. You'll receive a notification when your request is processed.`
+            pendingMessage
         );
         
         console.log("Sending admin notification...");

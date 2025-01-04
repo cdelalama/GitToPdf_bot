@@ -5,6 +5,7 @@ exports.handleWebApp = handleWebApp;
 const grammy_1 = require("grammy");
 const config_1 = require("../config/config");
 const database_1 = require("../utils/database");
+const dynamicConfig_1 = require("../utils/dynamicConfig");
 async function handleStart(ctx) {
     try {
         console.log("Received start command from:", ctx.from?.username);
@@ -12,7 +13,7 @@ async function handleStart(ctx) {
         const isAdmin = user?.is_admin || false;
         console.log("Is admin?", isAdmin, "User:", user);
         const keyboard = isAdmin ? new grammy_1.InlineKeyboard().webApp("⚙️ Admin Dashboard", config_1.config.webAppUrl) : undefined;
-        await ctx.reply("Welcome to GitToPDFBot! 📚\n\n" +
+        const welcomeMessage = await dynamicConfig_1.DynamicConfig.get('WELCOME_MESSAGE', "Welcome to GitToPDFBot! 📚\n\n" +
             "I convert GitHub repositories into PDF documents, making it easy to:\n" +
             "• Read code offline\n" +
             "• Share code documentation\n" +
@@ -21,10 +22,13 @@ async function handleStart(ctx) {
             "Just send me a GitHub repository URL and I'll generate a PDF with its contents.\n\n" +
             "🔜 Coming soon: Direct integration with ChatGPT to analyze repositories!\n\n" +
             "Example: https://github.com/username/repository" +
-            (isAdmin ? "\n\n🔐 Admin: Use the dashboard to manage users and monitor bot usage." : ""), { reply_markup: keyboard });
+            (isAdmin ? "\n\n🔐 Admin: Use the dashboard to manage users and monitor bot usage." : ""));
+        await ctx.reply(welcomeMessage, { reply_markup: keyboard });
     }
     catch (error) {
         console.error("Error in start command:", error);
+        const errorMessage = await dynamicConfig_1.DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
+        await ctx.reply(errorMessage);
     }
 }
 async function handleWebApp(ctx) {
@@ -48,5 +52,7 @@ async function handleWebApp(ctx) {
     }
     catch (error) {
         console.error("Error in web app command:", error);
+        const errorMessage = await dynamicConfig_1.DynamicConfig.get('ERROR_MESSAGE', 'An error occurred. Please try again.');
+        await ctx.reply(errorMessage);
     }
 }

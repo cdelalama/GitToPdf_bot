@@ -5,6 +5,7 @@ exports.handleUnauthorized = handleUnauthorized;
 const messages_1 = require("./messages");
 const database_1 = require("./database");
 const config_1 = require("../config/config");
+const dynamicConfig_1 = require("../utils/dynamicConfig");
 async function isUserAuthorized(ctx) {
     const userId = ctx.from?.id;
     console.log("Checking authorization for user:", userId);
@@ -30,8 +31,8 @@ async function isUserAuthorized(ctx) {
             if (autoApprove) {
                 console.log(`Auto-approving user ${userId}`);
                 await database_1.Database.updateUserStatus(userId, 'active');
-                await ctx.reply("✅ Welcome! You've been automatically approved to use the bot.\n" +
-                    "Send me a GitHub repository URL to generate a PDF.");
+                const approvalMessage = await dynamicConfig_1.DynamicConfig.get('APPROVAL_MESSAGE', '✅ Your access request has been approved! You can now use the bot.');
+                await ctx.reply(approvalMessage);
                 return true;
             }
             else {
@@ -58,11 +59,12 @@ async function handleUnauthorized(ctx) {
     try {
         console.log("Handling unauthorized access for user:", ctx.from?.id);
         const username = ctx.from?.username;
+        const welcomeMessage = await dynamicConfig_1.DynamicConfig.get('WELCOME_MESSAGE', 'Welcome to Git2PDF Bot! Send me a GitHub repository URL to generate a PDF.');
+        const pendingMessage = await dynamicConfig_1.DynamicConfig.get('PENDING_MESSAGE', '⏳ Your access request is being reviewed. You will be notified when processed.');
         const response = await ctx.reply(`👋 Hello${username ? ` @${username}` : ''}!\n\n` +
-            `This bot converts GitHub repositories into PDF documents, making it easy to read and share code offline. ` +
-            `Perfect for code reviews, documentation, and feeding context to AI tools like ChatGPT!\n\n` +
+            welcomeMessage + '\n\n' +
             `🔒 For security reasons, access is restricted. I've sent your access request to the administrator.\n\n` +
-            `⏳ Please wait for approval. You'll receive a notification when your request is processed.`);
+            pendingMessage);
         console.log("Sending admin notification...");
         await (0, messages_1.notifyAdmin)(ctx, "Bot Access Request");
         // Borrar el mensaje después del tiempo configurado
