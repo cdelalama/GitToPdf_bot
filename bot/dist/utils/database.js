@@ -45,7 +45,7 @@ if (!supabaseUrl || !supabaseKey) {
 }
 const supabase = (0, supabase_js_1.createClient)(supabaseUrl, supabaseKey);
 // Función de utilidad para reintentos
-async function withRetry(operation, maxRetries = 3, delay = 1000) {
+async function withRetry(operation, maxRetries = 3, delay = 1000, shouldRetry) {
     let lastError;
     for (let i = 0; i < maxRetries; i++) {
         try {
@@ -53,6 +53,10 @@ async function withRetry(operation, maxRetries = 3, delay = 1000) {
         }
         catch (error) {
             lastError = error;
+            // Si hay una función shouldRetry y retorna false, no reintentamos
+            if (shouldRetry && !shouldRetry(error)) {
+                throw error;
+            }
             console.warn(`Attempt ${i + 1}/${maxRetries} failed:`, error);
             if (i < maxRetries - 1) {
                 await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
@@ -75,47 +79,54 @@ class Database {
     }
     static async getUser(telegramId) {
         try {
-            const result = await withRetry(async () => {
-                const { data, error } = await supabase
-                    .from('users_git2pdf_bot')
-                    .select('*')
-                    .eq('telegram_id', telegramId)
-                    .single();
-                if (error) {
-                    console.error('Supabase error:', error);
-                    throw error;
-                }
-                return data;
-            });
-            return result;
+            const { data, error } = await supabase
+                .from('users_git2pdf_bot')
+                .select('*')
+                .eq('telegram_id', telegramId)
+                .single();
+            // PGRST116 significa que el usuario no existe, es un caso normal
+            if (error?.code === 'PGRST116') {
+                return null;
+            }
+            // Si hay otro tipo de error, entonces sí lo logueamos
+            if (error) {
+                console.error('Error inesperado al buscar usuario:', error);
+                return null;
+            }
+            return data;
         }
         catch (error) {
-            console.error('Error fetching user:', {
-                message: error instanceof Error ? error.message : 'Unknown error',
-                details: error
-            });
+            console.error('Error crítico en getUser:', error);
             return null;
         }
     }
     static async createUser(user) {
-        const { data, error } = await supabase
-            .from('users_git2pdf_bot')
-            .insert([{
+        try {
+            const { data, error } = await supabase
+                .from('users_git2pdf_bot')
+                .insert({
                 telegram_id: user.telegram_id,
                 telegram_username: user.telegram_username,
                 first_name: user.first_name,
                 last_name: user.last_name,
                 language_code: user.language_code,
                 status: 'pending',
-                pdfs_generated: 0
-            }])
-            .select()
-            .single();
-        if (error) {
-            console.error('Error creating user:', error);
+                pdfs_generated: 0,
+                created_at: new Date(),
+                updated_at: new Date()
+            })
+                .select()
+                .single();
+            if (error) {
+                console.error('Error creating user:', error);
+                return null;
+            }
+            return data;
+        }
+        catch (error) {
+            console.error('Error in createUser:', error);
             return null;
         }
-        return data;
     }
     static async updateUserStatus(telegramId, status, bannedBy, banReason) {
         const updateData = {

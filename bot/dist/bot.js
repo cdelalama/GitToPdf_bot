@@ -43,9 +43,10 @@ async function startBot() {
         bot.on("message:text", messages_1.handleTextMessage);
         // Callback handlers
         bot.callbackQuery(/^generate_pdf:/, callbacks_1.handleGeneratePdf);
-        bot.callbackQuery(/^cancel:/, callbacks_1.handleCancel);
+        bot.callbackQuery(/^cancel$/, callbacks_1.handleCancel);
         bot.callbackQuery(/^approve_user:/, callbacks_1.handleApproveUser);
         bot.callbackQuery(/^reject_user:/, callbacks_1.handleRejectUser);
+        bot.callbackQuery(/^approve_admin_user:/, callbacks_1.handleApproveAdminUser);
         // Error handler
         bot.catch(async (err) => {
             await (0, errors_1.handleError)(err, err.ctx, 'Global Error Handler');

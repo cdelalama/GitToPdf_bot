@@ -5,7 +5,7 @@ import { MyContext, initialSession } from "./types/context";
 import { isUserAuthorized, handleUnauthorized } from "./utils/auth";
 import { handleStart, handleWebApp } from "./handlers/commands";
 import { handleTextMessage } from "./handlers/messages";
-import { handleGeneratePdf, handleCancel, handleApproveUser, handleRejectUser } from "./handlers/callbacks";
+import { handleGeneratePdf, handleCancel, handleApproveUser, handleRejectUser, handleApproveAdminUser } from "./handlers/callbacks";
 import { webAppSecurityMiddleware } from "./middleware/webAppSecurity";
 import { handleError, initErrorHandler } from "./utils/errors";
 
@@ -50,9 +50,10 @@ async function startBot() {
 
         // Callback handlers
         bot.callbackQuery(/^generate_pdf:/, handleGeneratePdf);
-        bot.callbackQuery(/^cancel:/, handleCancel);
+        bot.callbackQuery(/^cancel$/, handleCancel);
         bot.callbackQuery(/^approve_user:/, handleApproveUser);
         bot.callbackQuery(/^reject_user:/, handleRejectUser);
+        bot.callbackQuery(/^approve_admin_user:/, handleApproveAdminUser);
 
         // Error handler
         bot.catch(async (err) => {

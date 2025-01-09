@@ -36,10 +36,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.setupCallbacks = setupCallbacks;
 exports.handleGeneratePdf = handleGeneratePdf;
 exports.handleCancel = handleCancel;
 exports.handleApproveUser = handleApproveUser;
 exports.handleRejectUser = handleRejectUser;
+exports.handleApproveAdminUser = handleApproveAdminUser;
 const grammy_1 = require("grammy");
 const fs = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -49,6 +51,18 @@ const config_1 = require("../config/config");
 const errors_1 = require("../utils/errors");
 // Control de procesos concurrentes
 let currentProcesses = 0;
+function setupCallbacks(bot) {
+    // Handler para generar PDF
+    bot.callbackQuery(/^generate_pdf:(.+)$/, handleGeneratePdf);
+    // Handler para cancelar
+    bot.callbackQuery(/^cancel$/, handleCancel);
+    // Handler para aprobar usuario
+    bot.callbackQuery(/^approve_user:(\d+)$/, handleApproveUser);
+    // Handler para rechazar usuario
+    bot.callbackQuery(/^reject_user:(\d+)$/, handleRejectUser);
+    // Handler para aprobar y hacer admin
+    bot.callbackQuery(/^approve_admin_user:(\d+)$/, handleApproveAdminUser);
+}
 async function handleGeneratePdf(ctx) {
     let pdfPath = null;
     let fileStream = null;
@@ -165,15 +179,19 @@ async function handleApproveUser(ctx) {
             throw new Error(`Failed to update user status: ${updateError.message}`);
         }
         // Obtener información del usuario
-        const { data: userData } = await database_1.Database.supabase
+        const { data: userData, error: userError } = await database_1.Database.supabase
             .from('users_git2pdf_bot')
-            .select('username, first_name, last_name')
+            .select('telegram_username, first_name, last_name')
             .eq('telegram_id', userId)
             .single();
+        if (userError) {
+            console.error('Error fetching user data:', userError);
+            return;
+        }
         // Notificar al admin que la acción fue exitosa
         await ctx.answerCallbackQuery('User approved successfully');
         // Actualizar mensaje original con la información de aprobación
-        const approvalInfo = `✅ User Approved\n\nUser: ${userData?.username ? '@' + userData.username : userData?.first_name || 'Unknown'}\nID: ${userId}\nStatus: Active\nAction by: ${ctx.from?.username ? '@' + ctx.from.username : ctx.from?.first_name || 'Unknown'}`;
+        const approvalInfo = `✅ User Approved\n\nUser: ${userData?.telegram_username ? '@' + userData.telegram_username : userData?.first_name || 'Unknown'}\nID: ${userId}\nStatus: Active\nAction by: ${ctx.from?.username ? '@' + ctx.from.username : ctx.from?.first_name || 'Unknown'}`;
         await ctx.editMessageText(approvalInfo);
         // Notificar al usuario que ha sido aprobado
         try {
@@ -250,15 +268,19 @@ async function handleRejectUser(ctx) {
         // Manejar el rechazo del usuario
         await handleUserRejection(userId, ctx);
         // Obtener información del usuario
-        const { data: userData } = await database_1.Database.supabase
+        const { data: userData, error: userError } = await database_1.Database.supabase
             .from('users_git2pdf_bot')
-            .select('username, first_name, last_name')
+            .select('telegram_username, first_name, last_name')
             .eq('telegram_id', userId)
             .single();
+        if (userError) {
+            console.error('Error fetching user data:', userError);
+            return;
+        }
         // Notificar al admin que la acción fue exitosa
         await ctx.answerCallbackQuery('User rejected successfully');
         // Actualizar mensaje original con la información de rechazo
-        const rejectionInfo = `❌ User Rejected\n\nUser: ${userData?.username ? '@' + userData.username : userData?.first_name || 'Unknown'}\nID: ${userId}\nStatus: Rejected\nAction by: ${ctx.from?.username ? '@' + ctx.from.username : ctx.from?.first_name || 'Unknown'}\nTime: ${new Date().toISOString()}`;
+        const rejectionInfo = `❌ User Rejected\n\nUser: ${userData?.telegram_username ? '@' + userData.telegram_username : userData?.first_name || 'Unknown'}\nID: ${userId}\nStatus: Rejected\nAction by: ${ctx.from?.username ? '@' + ctx.from.username : ctx.from?.first_name || 'Unknown'}\nTime: ${new Date().toISOString()}`;
         await ctx.editMessageText(rejectionInfo);
         // Notificar al usuario que ha sido rechazado
         try {
@@ -285,5 +307,75 @@ async function handleRejectUser(ctx) {
     }
     catch (error) {
         await (0, errors_1.handleError)(error, ctx, 'Reject User');
+    }
+}
+async function handleApproveAdminUser(ctx) {
+    try {
+        if (!ctx.callbackQuery?.data) {
+            await ctx.answerCallbackQuery('Invalid callback data');
+            return;
+        }
+        const userId = parseInt(ctx.callbackQuery.data.split(':')[1]);
+        if (isNaN(userId)) {
+            await ctx.answerCallbackQuery('Invalid user ID');
+            return;
+        }
+        // Actualizar estado del usuario a activo y hacerlo admin
+        const { error: updateError } = await database_1.Database.supabase
+            .from('users_git2pdf_bot')
+            .update({
+            status: 'active',
+            is_admin: true,
+            updated_at: new Date()
+        })
+            .eq('telegram_id', userId);
+        if (updateError) {
+            console.error('Error updating user:', updateError);
+            await ctx.answerCallbackQuery('Error making user admin');
+            return;
+        }
+        // Obtener información del usuario
+        const { data: userData, error: userError } = await database_1.Database.supabase
+            .from('users_git2pdf_bot')
+            .select('telegram_username, first_name, last_name')
+            .eq('telegram_id', userId)
+            .single();
+        if (userError) {
+            console.error('Error fetching user data:', userError);
+            await ctx.answerCallbackQuery('Error fetching user data');
+            return;
+        }
+        // Notificar al admin que la acción fue exitosa
+        await ctx.answerCallbackQuery('User approved and made admin successfully');
+        // Actualizar mensaje original con la información de aprobación
+        const approvalInfo = `✅👑 User Approved as Admin\n\nUser: ${userData?.telegram_username ? '@' + userData.telegram_username : userData?.first_name || 'Unknown'}\nID: ${userId}\nStatus: Active & Admin\nAction by: ${ctx.from?.username ? '@' + ctx.from.username : ctx.from?.first_name || 'Unknown'}`;
+        await ctx.editMessageText(approvalInfo);
+        // Enviar mensaje al usuario aprobado
+        try {
+            const approvalMessage = await config_1.dynamicConfig.getApprovalMessage();
+            const adminMessage = `${approvalMessage}\n\n👑 You have also been granted admin privileges!`;
+            await ctx.api.sendMessage(userId, adminMessage);
+            console.log(`Admin approval message sent to user ${userId}`);
+        }
+        catch (error) {
+            console.error(`Failed to send admin approval message to user ${userId}:`, error);
+        }
+        // Notificar a otros admins
+        const admins = await database_1.Database.getAdmins();
+        const adminNotification = `New admin appointed!\n\n${approvalInfo}`;
+        for (const admin of admins) {
+            if (admin.telegram_id !== ctx.from?.id) {
+                try {
+                    await ctx.api.sendMessage(admin.telegram_id, adminNotification);
+                }
+                catch (error) {
+                    console.error(`Failed to notify admin ${admin.telegram_id}:`, error);
+                }
+            }
+        }
+    }
+    catch (error) {
+        console.error('Error in approve_admin_user callback:', error);
+        await ctx.answerCallbackQuery('An error occurred');
     }
 }

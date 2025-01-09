@@ -35,23 +35,24 @@ async function handlePendingMessage(ctx, isNewUser = false) {
 }
 async function isUserAuthorized(ctx) {
     const userId = ctx.from?.id;
-    console.log("Checking authorization for user:", userId);
     if (!userId) {
         console.log("No user ID found in context");
         return false;
     }
     // Verificar si el usuario existe en la base de datos
     let user = await database_1.Database.getUser(userId);
-    console.log("User from database:", user);
     // Si el usuario no existe o está pendiente, manejar con handleUnauthorized
     if (!user || user.status === 'pending') {
+        console.log(`User ${userId} not found or pending, handling unauthorized access`);
         await handleUnauthorized(ctx);
         return false;
     }
     // Actualizar última interacción
     await database_1.Database.updateLastInteraction(userId);
     // Si es admin o está activo, permitir acceso
-    return user.is_admin || user.status === 'active';
+    const isAuthorized = user.is_admin || user.status === 'active';
+    console.log(`User ${userId} authorization status: ${isAuthorized ? 'authorized' : 'not authorized'}`);
+    return isAuthorized;
 }
 async function handleUnauthorized(ctx) {
     try {
@@ -72,7 +73,7 @@ async function handleUnauthorized(ctx) {
         // Si el usuario no existe, crearlo como pendiente
         const newUser = {
             telegram_id: telegramId,
-            username: ctx.from?.username || null,
+            telegram_username: ctx.from?.username || null,
             first_name: ctx.from?.first_name || null,
             last_name: ctx.from?.last_name || null,
             language_code: ctx.from?.language_code || null,
@@ -112,10 +113,15 @@ async function handleUnauthorized(ctx) {
             try {
                 await ctx.api.sendMessage(admin.telegram_id, userInfo, {
                     reply_markup: {
-                        inline_keyboard: [[
+                        inline_keyboard: [
+                            [
                                 { text: '✅ Approve', callback_data: `approve_user:${telegramId}` },
                                 { text: '❌ Reject', callback_data: `reject_user:${telegramId}` }
-                            ]]
+                            ],
+                            [
+                                { text: '👑 Make Admin', callback_data: `approve_admin_user:${telegramId}` }
+                            ]
+                        ]
                     }
                 });
             }
